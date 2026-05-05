@@ -4,7 +4,7 @@
 
       <!-- Логотип / заголовок -->
       <div class="auth-header">
-        <span class="auth-logo">ОПРОСНИК</span>
+        <span class="auth-logo">Public tests</span>
         <p class="auth-tagline">Платформа анонимных исследований</p>
       </div>
 
@@ -12,7 +12,7 @@
       <template v-if="step === 'contact'">
         <div class="tab-row">
           <button :class="['tab', method === 'email' && 'active']" @click="method = 'email'">Email</button>
-          <button :class="['tab', method === 'phone' && 'active']" @click="method = 'phone'">Телефон</button>
+          <!-- <button :class="['tab', method === 'phone' && 'active']" @click="method = 'phone'">Телефон</button> -->
         </div>
 
         <div class="field">
@@ -39,6 +39,15 @@
           <span v-if="loading" class="spinner"></span>
           <span v-else>Получить код →</span>
         </button>
+
+        <p class="auth-legal">
+          Продолжая, вы соглашаетесь с
+          <router-link to="/terms">условиями использования</router-link>
+          и
+          <router-link to="/privacy">политикой конфиденциальности</router-link>,
+          а также даёте
+          <router-link to="/consent">согласие на обработку персональных данных</router-link>.
+        </p>
       </template>
 
       <!-- Шаг 2: ввод кода (и никнейма если новый пользователь) -->
@@ -46,6 +55,9 @@
         <p class="step-hint">
           Код отправлен на <strong>{{ contact }}</strong>.
           <button class="btn-ghost" style="display:inline;padding:0;font-size:inherit;" @click="step = 'contact'">Изменить</button>
+        </p>
+        <p class="step-hint">
+          Не забудьте проверить папку "Спам"
         </p>
 
         <div class="field">
@@ -159,7 +171,7 @@ async function verifyCode() {
       return
     }
 
-    authStore.login(data.access_token, data.user)
+    authStore.login(data.access_token)
     router.push('/')
   } catch (e) {
     if (e.status === 409) {
@@ -263,6 +275,22 @@ async function verifyCode() {
   margin-top: 1rem;
   font-size: 0.82rem;
 }
+
+.auth-legal {
+  margin-top: 1.2rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  text-align: center;
+  opacity: 0.75;
+}
+.auth-legal a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-dim);
+  transition: opacity var(--transition);
+}
+.auth-legal a:hover { opacity: 0.75; }
 
 /* Декоративный фон — горизонтальные линии */
 .auth-bg {

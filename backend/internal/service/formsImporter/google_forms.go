@@ -1,13 +1,16 @@
-package importer
+package formsImporter
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,8 +48,8 @@ func NewGoogleFormsImporter(client *http.Client) *GoogleFormsImporter {
 }
 
 // Import принимает любую ссылку на Google Form и возвращает структуру теста.
-func (g *GoogleFormsImporter) Import(rawURL string) (*domain.ImportedTest, error) {
-	viewURL, err := normalizeGoogleFormURL(rawURL)
+func (g *GoogleFormsImporter) Import(ctx context.Context, rawURL string) (*domain.ImportedTest, error) {
+	viewURL, err := normalizeGoogleFormURL(ctx, rawURL)
 	if err != nil {
 		return nil, err
 	}
@@ -81,10 +84,10 @@ func (g *GoogleFormsImporter) Import(rawURL string) (*domain.ImportedTest, error
 //	https://docs.google.com/forms/d/FORM_ID/viewform
 //	https://docs.google.com/forms/d/FORM_ID/edit
 //	https://forms.gle/SHORT_CODE  (редиректим через HEAD запрос)
-func normalizeGoogleFormURL(raw string) (string, error) {
+func normalizeGoogleFormURL(ctx context.Context, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", fmt.Errorf("empty URL")
+		return "", errors.New("empty URL")
 	}
 
 	parsed, err := url.Parse(raw)
@@ -96,11 +99,11 @@ func normalizeGoogleFormURL(raw string) (string, error) {
 
 	// Короткая ссылка forms.gle
 	if host == "forms.gle" {
-		resolved, err := resolveShortURLWithGet(raw)
+		resolved, err := resolveShortURLWithGet(ctx, raw)
 		if err != nil {
 			return "", fmt.Errorf("resolve short URL: %w", err)
 		}
-		return normalizeGoogleFormURL(resolved)
+		return normalizeGoogleFormURL(ctx, resolved)
 	}
 
 	if host != "docs.google.com" {
@@ -124,7 +127,7 @@ func normalizeGoogleFormURL(raw string) (string, error) {
 	}
 
 	if formID == "" {
-		return "", fmt.Errorf("could not extract form ID from URL")
+		return "", errors.New("could not extract form ID from URL")
 	}
 
 	// Всегда возвращаем канонический viewform URL (поддерживаем оба формата)
@@ -133,26 +136,6 @@ func normalizeGoogleFormURL(raw string) (string, error) {
 		return fmt.Sprintf("https://docs.google.com/forms/d/e/%s/viewform", formID), nil
 	}
 	return fmt.Sprintf("https://docs.google.com/forms/d/%s/viewform", formID), nil
-}
-
-func resolveShortURL(shortURL string) (string, error) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse // останавливаемся на первом редиректе
-		},
-	}
-	resp, err := client.Head(shortURL)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	location := resp.Header.Get("Location")
-	if location == "" {
-		return "", fmt.Errorf("no redirect location for short URL")
-	}
-	return location, nil
 }
 
 // --- шаг 2: загрузка HTML ---
@@ -164,7 +147,10 @@ func (g *GoogleFormsImporter) fetchHTML(formURL string) (string, error) {
 	}
 
 	// Максимально имитируем браузер
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set(
+		"User-Agent",
+		"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+	)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 	req.Header.Set("Connection", "keep-alive")
@@ -214,7 +200,7 @@ func (g *GoogleFormsImporter) fetchHTML(formURL string) (string, error) {
 func extractFormData(html string) ([]any, error) {
 	matches := reFormData.FindStringSubmatch(html)
 	if len(matches) < 2 {
-		return nil, fmt.Errorf("FB_PUBLIC_LOAD_DATA_ not found; form may be private or URL is invalid")
+		return nil, errors.New("FB_PUBLIC_LOAD_DATA_ not found; form may be private or URL is invalid")
 	}
 
 	var data []any
@@ -230,9 +216,14 @@ func parseFormData(data []any) (*domain.ImportedTest, error) {
 		return nil, fmt.Errorf("no main block: %w", err)
 	}
 
-	title, _ := getString(mainBlock, 8)
-	desc, _ := getString(mainBlock, 0)
-
+	title, ok := getString(mainBlock, 8)
+	if !ok {
+		title = "Untitled Form"
+	}
+	desc, ok := getString(mainBlock, 0)
+	if !ok {
+		desc = ""
+	}
 	slog.Debug("mainBlock length", "len", len(mainBlock))
 
 	questionsRaw, err := getArray(mainBlock, 1)
@@ -279,7 +270,7 @@ func parseFormData(data []any) (*domain.ImportedTest, error) {
 
 func parseQuestion(q []any) (*domain.Question, error) {
 	if len(q) < 5 {
-		return nil, fmt.Errorf("question array too short")
+		return nil, errors.New("question array too short")
 	}
 
 	idRaw, _ := q[0].(float64)
@@ -294,7 +285,7 @@ func parseQuestion(q []any) (*domain.Question, error) {
 	}
 
 	result := &domain.Question{
-		ID:       fmt.Sprintf("%d", int64(idRaw)),
+		ID:       strconv.FormatInt(int64(idRaw), 10),
 		Text:     text,
 		Required: required,
 	}
@@ -313,9 +304,9 @@ func parseQuestion(q []any) (*domain.Question, error) {
 
 	case gfTypeScale:
 		result.Type = domain.QuestionTypeScale
-		min, max, minLabel, maxLabel := parseScale(q)
-		result.MinValue = &min
-		result.MaxValue = &max
+		minVal, maxVal, minLabel, maxLabel := parseScale(q)
+		result.MinValue = &minVal
+		result.MaxValue = &maxVal
 		result.MinLabel = minLabel
 		result.MaxLabel = maxLabel
 
@@ -369,32 +360,32 @@ func parseOptions(q []any) []domain.QuestionOption {
 	return opts
 }
 
-func parseScale(q []any) (min, max int, minLabel, maxLabel string) {
-	min, max = 1, 5
+func parseScale(q []any) (minL, maxL int, minLabel, maxLabel string) {
+	minL, maxL = 1, 5
 
 	subBlocks, err := getArray(q, 4)
 	if err != nil || len(subBlocks) == 0 {
-		return
+		return minL, maxL, minLabel, maxLabel
 	}
 
 	firstSub, ok := subBlocks[0].([]any)
 	if !ok || len(firstSub) < 2 {
-		return
+		return minL, maxL, minLabel, maxLabel
 	}
 
 	optList, err := getArray(firstSub, 1)
 	if err != nil || len(optList) < 2 {
-		return
+		return minL, maxL, minLabel, maxLabel
 	}
 
 	if v, ok := optList[0].([]any); ok && len(v) > 0 {
 		if f, ok := v[0].(float64); ok {
-			min = int(f)
+			minL = int(f)
 		}
 	}
 	if v, ok := optList[len(optList)-1].([]any); ok && len(v) > 0 {
 		if f, ok := v[0].(float64); ok {
-			max = int(f)
+			maxL = int(f)
 		}
 	}
 
@@ -405,13 +396,13 @@ func parseScale(q []any) (min, max int, minLabel, maxLabel string) {
 	if len(firstSub) > 4 {
 		maxLabel, _ = firstSub[4].(string)
 	}
-	return
+	return minL, maxL, minLabel, maxLabel
 }
 
 func parseGrid(q []any) (rows, cols []string) {
 	subBlocks, err := getArray(q, 4)
 	if err != nil || len(subBlocks) < 2 {
-		return
+		return rows, cols
 	}
 
 	// rows — из первого subblock
@@ -439,7 +430,7 @@ func parseGrid(q []any) (rows, cols []string) {
 			}
 		}
 	}
-	return
+	return rows, cols
 }
 
 // --- утилиты для работы с []any ---
@@ -473,17 +464,45 @@ func getFloat(arr []any, idx int) float64 {
 
 // resolveShortURLWithGet выполняет GET-запрос с автоматическим редиректом
 // и возвращает финальный URL (например, docs.google.com/forms/d/e/.../viewform).
-func resolveShortURLWithGet(shortURL string) (string, error) {
+func resolveShortURLWithGet(ctx context.Context, shortURL string) (string, error) {
+	// Используем контекст и timeout вместе
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	client := &http.Client{
+		// Таймаут на уровне клиента как fallback
 		Timeout: 10 * time.Second,
-		// Не запрещаем редирект, идём до конца цепочки
+		// Ограничиваем количество редиректов
+		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return errors.New("too many redirects (max 10)")
+			}
+			return nil // разрешить редирект
+		},
 	}
-	resp, err := client.Get(shortURL)
+
+	// Используем контекст для запроса
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, shortURL, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("do request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Проверяем статус ответа
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
 	// После всех редиректов в resp.Request.URL лежит конечный адрес
-	return resp.Request.URL.String(), nil
+	finalURL := resp.Request.URL.String()
+	if finalURL == "" {
+		return "", errors.New("empty final URL")
+	}
+
+	return finalURL, nil
 }

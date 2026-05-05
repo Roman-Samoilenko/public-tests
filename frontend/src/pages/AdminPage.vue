@@ -86,7 +86,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { api } from '../api/index.js'
 
 const tests       = ref([])
@@ -101,7 +101,7 @@ async function loadTests() {
   loading.value = true
   try {
     // Загружаем все тесты, включая заблокированные (для админа)
-    const data = await api.getTests({ limit, offset: offset.value })
+    const data = await api.getTests({ limit, offset: offset.value, status: 'all' })
     tests.value = data.items || []
     total.value = data.total || 0
   } catch (e) {

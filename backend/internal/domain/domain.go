@@ -87,6 +87,7 @@ type TestListParams struct {
 	UserID   int64 // для фильтра "my"
 	Limit    int
 	Offset   int
+	Status   string // "published" | "blocked" | "" (для админов)
 }
 
 // TestListResponse — ответ со списком тестов и пагинацией.
@@ -116,7 +117,7 @@ type AnswerResult struct {
 	AnswerID  int64           `json:"answer_id"`
 	TestID    int64           `json:"test_id"`
 	Score     *int            `json:"score,omitempty"`
-	Result    json.RawMessage `json:"result,omitempty"` // v1: null, v2: вычисленный
+	Result    json.RawMessage `json:"result,omitempty"`
 	CreatedAt time.Time       `json:"created_at"`
 	UpdatedAt time.Time       `json:"updated_at"`
 }
@@ -214,12 +215,19 @@ type TestRepository interface {
 	List(ctx context.Context, params TestListParams) (*TestListResponse, error)
 	GetByID(ctx context.Context, id int64) (*Test, error)
 	Create(ctx context.Context, authorID int64, req CreateTestRequest) (*Test, error)
-	SubmitAnswer(ctx context.Context, testID, userID int64, req SubmitAnswerRequest, result json.RawMessage) (*AnswerResult, error)
+	SubmitAnswer(
+		ctx context.Context,
+		testID, userID int64,
+		req SubmitAnswerRequest,
+		result json.RawMessage,
+	) (*AnswerResult, error)
 	Vote(ctx context.Context, testID, userID int64, vote int) error
 	GetComments(ctx context.Context, testID int64) ([]Comment, error)
 	AddComment(ctx context.Context, testID, userID int64, nickname, content string) (*Comment, error)
 	DeleteComment(ctx context.Context, testID, commentID, userID int64) error
 	SetOfficial(ctx context.Context, testID int64, official bool) error
+	SetStatus(ctx context.Context, testID int64, status string) error
+	UpdateTest(ctx context.Context, id, authorID int64, isAdmin bool, req CreateTestRequest) (*Test, error)
 }
 
 type AnswerRepository interface {

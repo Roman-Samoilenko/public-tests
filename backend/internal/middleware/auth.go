@@ -70,10 +70,11 @@ func ClaimsFromContext(ctx context.Context) *domain.AuthClaims {
 
 // jwtClaims — внутренняя структура для парсинга токена.
 type jwtClaims struct {
+	jwt.RegisteredClaims
+
 	UserID   int64  `json:"user_id"`
 	Nickname string `json:"nickname"`
 	IsAdmin  bool   `json:"is_admin"`
-	jwt.RegisteredClaims
 }
 
 func writeUnauthorized(w http.ResponseWriter, msg string) {

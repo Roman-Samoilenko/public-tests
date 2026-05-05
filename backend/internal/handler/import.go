@@ -8,27 +8,27 @@ import (
 
 	"quiz-platform/internal/domain"
 	"quiz-platform/internal/middleware"
-	"quiz-platform/internal/service/importer"
+	"quiz-platform/internal/service/formsImporter"
 )
 
 type ImportHandler struct {
-	gf *importer.GoogleFormsImporter
+	gf *formsImporter.GoogleFormsImporter
 }
 
 func NewImportHandler(client *http.Client) *ImportHandler {
 	return &ImportHandler{
-		gf: importer.NewGoogleFormsImporter(client),
+		gf: formsImporter.NewGoogleFormsImporter(client),
 	}
 }
 
-// POST /api/import/google-forms
+// ImportGoogleForm POST /api/import/google-forms
 //
 // Принимает ссылку на Google Form, возвращает структуру теста для превью.
 // Тест НЕ сохраняется автоматически — клиент показывает превью,
 // затем отправляет POST /api/tests для публикации.
 //
 // Body:   {"url": "https://docs.google.com/forms/d/.../viewform"}
-// Response: ImportedTest (title, description, questions[])
+// Response: ImportedTest (title, description, questions[]).
 func (h *ImportHandler) ImportGoogleForm(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 
@@ -46,7 +46,7 @@ func (h *ImportHandler) ImportGoogleForm(w http.ResponseWriter, r *http.Request)
 
 	slog.Info("import google form", "user_id", claims.UserID, "url", req.URL)
 
-	imported, err := h.gf.Import(req.URL)
+	imported, err := h.gf.Import(r.Context(), req.URL)
 	if err != nil {
 		// Различаем ошибки валидации URL от сетевых/парсинговых
 		msg := err.Error()

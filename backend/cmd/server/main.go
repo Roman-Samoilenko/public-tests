@@ -16,7 +16,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-// newIPv4OnlyHTTPClient создаёт HTTP-клиент, который работает только через IPv4
+// newIPv4OnlyHTTPClient создаёт HTTP-клиент, который работает только через IPv4.
 func newIPv4OnlyHTTPClient() *http.Client {
 	jar, _ := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,

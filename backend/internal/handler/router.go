@@ -22,7 +22,7 @@ func NewRouter(
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
@@ -50,13 +50,15 @@ func NewRouter(
 				r.Get("/comments", tests.GetComments)
 				r.Post("/comments", tests.AddComment)
 				r.Delete("/comments/{commentId}", tests.DeleteComment)
+				r.Patch("/", tests.UpdateTest)
 			})
 		})
 
 		// Админ
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(authmw.AdminOnly)
-			r.Post("/tests/{id}/official", admin.MakeOfficial)
+			r.Patch("/tests/{id}/official", admin.SetOfficial)
+			r.Patch("/tests/{id}/status", admin.SetStatus)
 		})
 	})
 

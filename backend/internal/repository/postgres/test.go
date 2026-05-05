@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"quiz-platform/internal/domain"
@@ -39,12 +38,10 @@ func (b *queryBuilder) where() string {
 	if len(b.conds) == 0 {
 		return ""
 	}
-	return "AND " + strings.Join(b.conds, " AND ")
+	return "WHERE " + strings.Join(b.conds, " AND ")
 }
 
-// List возвращает список тестов с фильтрацией, поиском, сортировкой и пагинацией.
 func (r *TestRepository) List(ctx context.Context, params domain.TestListParams) (*domain.TestListResponse, error) {
-	// ORDER BY
 	orderBy := "t.rating DESC"
 	switch params.Sort {
 	case "newest":
@@ -55,8 +52,21 @@ func (r *TestRepository) List(ctx context.Context, params domain.TestListParams)
 		orderBy = "comment_count DESC"
 	}
 
-	// Динамические условия
 	qb := &queryBuilder{argIdx: 0}
+
+	// Статус (по умолчанию published)
+	status := params.Status
+	if status == "" {
+		status = "published"
+	}
+	switch status {
+	case "all":
+		// без ограничения
+	case "blocked":
+		qb.conds = append(qb.conds, "t.status = 'blocked'")
+	default: // "published"
+		qb.conds = append(qb.conds, "t.status = 'published'")
+	}
 
 	if params.Search != "" {
 		qb.add("t.search_vector @@ plainto_tsquery('russian', $%d)", params.Search)
@@ -74,19 +84,15 @@ func (r *TestRepository) List(ctx context.Context, params domain.TestListParams)
 		qb.add("t.author_id = $%d", params.AuthorID)
 	}
 
-	whereClause := qb.where()
+	whereClause := qb.where() // "WHERE ..." или ""
 
-	// COUNT для пагинации
-	countQuery := fmt.Sprintf(
-		`SELECT COUNT(*) FROM tests t WHERE t.status = 'published' %s`,
-		whereClause,
-	)
+	// COUNT
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM tests t %s", whereClause)
 	var total int
 	if err := r.db.QueryRow(ctx, countQuery, qb.args...).Scan(&total); err != nil {
 		return nil, fmt.Errorf("count tests: %w", err)
 	}
 
-	// Добавляем LIMIT и OFFSET после динамических аргументов
 	limitIdx := qb.argIdx + 1
 	offsetIdx := qb.argIdx + 2
 	listArgs := append(qb.args, params.Limit, params.Offset)
@@ -99,12 +105,11 @@ func (r *TestRepository) List(ctx context.Context, params domain.TestListParams)
 			t.created_at, t.updated_at,
 			(SELECT COUNT(*) FROM test_comments WHERE test_id = t.id)::int AS comment_count
 		FROM tests t
-		WHERE t.status = 'published'
 		%s
 		ORDER BY %s
-		LIMIT $%d OFFSET $%d`,
-		whereClause, orderBy, limitIdx, offsetIdx,
-	)
+		LIMIT $%d OFFSET $%d`, whereClause, orderBy, limitIdx, offsetIdx)
+
+	// ... дальше rows, scan — без изменений
 
 	rows, err := r.db.Query(ctx, selectQuery, listArgs...)
 	if err != nil {
@@ -167,7 +172,11 @@ func (r *TestRepository) GetByID(ctx context.Context, id int64) (*domain.Test, e
 }
 
 // Create создаёт новый тест и добавляет запись в moderation_log.
-func (r *TestRepository) Create(ctx context.Context, authorID int64, req domain.CreateTestRequest) (*domain.Test, error) {
+func (r *TestRepository) Create(
+	ctx context.Context,
+	authorID int64,
+	req domain.CreateTestRequest,
+) (*domain.Test, error) {
 	// questions уже json.RawMessage — маршалить не нужно
 	// tags: nil → пустой массив
 	tags := req.Tags
@@ -218,7 +227,12 @@ func (r *TestRepository) Create(ctx context.Context, authorID int64, req domain.
 
 // SubmitAnswer сохраняет ответы через upsert.
 // pass_count инкрементируется только при первом ответе.
-func (r *TestRepository) SubmitAnswer(ctx context.Context, testID, userID int64, req domain.SubmitAnswerRequest, result json.RawMessage) (*domain.AnswerResult, error) {
+func (r *TestRepository) SubmitAnswer(
+	ctx context.Context,
+	testID, userID int64,
+	req domain.SubmitAnswerRequest,
+	result json.RawMessage,
+) (*domain.AnswerResult, error) {
 	answersJSON, err := json.Marshal(req.Answers)
 	if err != nil {
 		return nil, fmt.Errorf("marshal answers: %w", err)
@@ -259,9 +273,9 @@ func (r *TestRepository) SubmitAnswer(ctx context.Context, testID, userID int64,
 		 	answers    = EXCLUDED.answers,
 		 	result     = EXCLUDED.result,
 		 	updated_at = NOW()
-		 RETURNING id, created_at, updated_at`,
+		 RETURNING id, result, created_at, updated_at`,
 		testID, userID, answersJSON, result,
-	).Scan(&ar.AnswerID, &ar.CreatedAt, &ar.UpdatedAt)
+	).Scan(&ar.AnswerID, &ar.Result, &ar.CreatedAt, &ar.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("upsert answer: %w", err)
 	}
@@ -326,7 +340,11 @@ func (r *TestRepository) GetComments(ctx context.Context, testID int64) ([]domai
 }
 
 // AddComment добавляет комментарий к тесту, сохраняя никнейм из JWT.
-func (r *TestRepository) AddComment(ctx context.Context, testID, userID int64, nickname, content string) (*domain.Comment, error) {
+func (r *TestRepository) AddComment(
+	ctx context.Context,
+	testID, userID int64,
+	nickname, content string,
+) (*domain.Comment, error) {
 	c := &domain.Comment{TestID: testID, UserID: userID, Nickname: nickname, Content: content}
 	err := r.db.QueryRow(ctx,
 		`INSERT INTO test_comments (test_id, user_id, nickname, content)
@@ -380,8 +398,64 @@ func (r *TestRepository) SetOfficial(ctx context.Context, testID int64, official
 	return nil
 }
 
-// isUniqueViolation проверяет код ошибки PostgreSQL 23505.
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+func (r *TestRepository) SetStatus(ctx context.Context, testID int64, status string) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE tests SET status = $1, updated_at = NOW() WHERE id = $2`,
+		status, testID,
+	)
+	if err != nil {
+		return fmt.Errorf("set status: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrTestNotFound
+	}
+	return nil
+}
+
+// UpdateTest обновляет тест. Только автор или администратор.
+func (r *TestRepository) UpdateTest(
+	ctx context.Context,
+	id, authorID int64,
+	isAdmin bool,
+	req domain.CreateTestRequest,
+) (*domain.Test, error) {
+	var ownerID int64
+	err := r.db.QueryRow(ctx,
+		`SELECT author_id FROM tests WHERE id = $1`, id,
+	).Scan(&ownerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrTestNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get test owner: %w", err)
+	}
+	if ownerID != authorID && !isAdmin {
+		return nil, domain.ErrForbidden
+	}
+
+	tags := req.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	var t domain.Test
+	err = r.db.QueryRow(ctx,
+		`UPDATE tests
+		 SET title=$1, description=$2, questions=$3, tags=$4, result_config=$5, updated_at=NOW()
+		 WHERE id=$6
+		 RETURNING
+		 	id, author_id, title, description, questions,
+		 	tags, result_config,
+		 	status, is_official, rating, pass_count, created_at, updated_at`,
+		req.Title, req.Description, req.Questions, tags, req.ResultConfig, id,
+	).Scan(
+		&t.ID, &t.AuthorID, &t.Title, &t.Description, &t.Questions,
+		&t.Tags, &t.ResultConfig,
+		&t.Status, &t.IsOfficial, &t.Rating, &t.PassCount,
+		&t.CreatedAt, &t.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update test: %w", err)
+	}
+	return &t, nil
 }

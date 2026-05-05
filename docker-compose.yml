@@ -26,6 +26,7 @@ services:
       - postgres_main_data:/var/lib/postgresql/data
       - ./backend/migrations/000001_init.up.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
       - ./backend/migrations/000002_features.up.sql:/docker-entrypoint-initdb.d/02_features.sql:ro
+      - ./backend/migrations/000003_seed_official_tests.up.sql:/docker-entrypoint-initdb.d/03_seed.sql:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U main_user -d main_db" ]
       interval: 5s
@@ -40,6 +41,7 @@ services:
       interval: 7s
       timeout: 7s
       retries: 11
+
   auth-service:
     build:
       context: ../auth-service
@@ -48,9 +50,13 @@ services:
       DATABASE_URL: "postgres://auth_user:auth_pass@postgres-auth:5432/auth_db?sslmode=disable"
       JWT_SECRET: "dev-secret-change-in-production-min-32-chars"
       CONTACT_PEPPER: "dev-pepper-change-in-production"
-      ACCESS_TOKEN_TTL: "15m"
+      ACCESS_TOKEN_TTL: "1m"
       REFRESH_TOKEN_TTL: "168h"
       REDIS_ADDR: "redis:6379"
+      AWS_ACCESS_KEY_ID: "dev"
+      AWS_SECRET_ACCESS_KEY: "dev"
+      POSTBOX_SENDER: "dev@local"
+      AWS_REGION: "dev"
     ports:
       - "8081:8081"
     depends_on:
@@ -78,7 +84,6 @@ services:
 volumes:
   postgres_auth_data:
   postgres_main_data:
-
 
 networks:
   default:

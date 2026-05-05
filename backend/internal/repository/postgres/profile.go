@@ -46,7 +46,11 @@ func (r *ProfileRepository) Get(ctx context.Context, userID int64) (*domain.Prof
 }
 
 // Upsert создаёт или обновляет профиль. Обновляет только переданные поля.
-func (r *ProfileRepository) Upsert(ctx context.Context, userID int64, req domain.UpdateProfileRequest) (*domain.Profile, error) {
+func (r *ProfileRepository) Upsert(
+	ctx context.Context,
+	userID int64,
+	req domain.UpdateProfileRequest,
+) (*domain.Profile, error) {
 	p := &domain.Profile{UserID: userID}
 	err := r.db.QueryRow(ctx,
 		`INSERT INTO profiles (user_id, age, gender, income, children, religion, education)

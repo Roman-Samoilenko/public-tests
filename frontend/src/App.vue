@@ -12,26 +12,45 @@
     </nav>
     <main>
       <router-view v-slot="{ Component }">
-        <transition name="fade">
-          <component :is="Component" :key="$route.fullPath" />
+        <transition name="fade" mode="out-in">
+          <component :is="Component" :key="$route.path" />
         </transition>
       </router-view>
     </main>
+    <SiteFooter />
   </div>
 </template>
 
 <script setup>
+import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { authStore } from './store/auth.js'
 import { auth } from './api/index.js'
+import SiteFooter from './components/SiteFooter.vue'
+import { authStore } from './store/auth.js'
+import { configStore } from './store/configStore'
 
 const router = useRouter()
+
+let refreshTimer = null
 
 async function handleLogout() {
   await auth.logout().catch(() => {})
   authStore.logout()
   router.push('/auth')
 }
+
+onMounted(() => {
+  // Запускаем таймер обновления токенов, если пользователь вошёл
+  if (authStore.isLoggedIn.value) {
+    refreshTimer = setInterval(async () => {
+      await authStore.refreshSession()
+    }, (configStore.accessTokenTTL / 2) * 1000)
+  }
+})
+
+onUnmounted(() => {
+  clearInterval(refreshTimer)
+})
 </script>
 
 <style>

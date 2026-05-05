@@ -20,7 +20,11 @@ func NewAnswerRepository(db *pgxpool.Pool) *AnswerRepository {
 }
 
 // GetUserHistory возвращает историю ответов пользователя с пагинацией.
-func (r *AnswerRepository) GetUserHistory(ctx context.Context, userID int64, limit, offset int) (*domain.PaginatedAnswers, error) {
+func (r *AnswerRepository) GetUserHistory(
+	ctx context.Context,
+	userID int64,
+	limit, offset int,
+) (*domain.PaginatedAnswers, error) {
 	var total int
 	if err := r.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM test_answers WHERE user_id = $1`, userID,
@@ -82,7 +86,7 @@ func (r *AnswerRepository) GetUserAnswer(ctx context.Context, userID, testID int
 		&item.CreatedAt, &item.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, nil // нет ответа, но это не ошибка — хэндлер отдает 200 с null
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get user answer: %w", err)

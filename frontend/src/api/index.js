@@ -1,24 +1,31 @@
-// api/index.js
-
 const AUTH_BASE = '/api/auth'
 const API_BASE = '/api'
 
-// --- token utils ---
+const ACCESS_TOKEN_KEY = 'access_token'
+const REFRESH_TOKEN_KEY = 'refresh_token'
 
-function getToken() {
-  return localStorage.getItem('access_token')
+// ================== Токены ==================
+export function getAccessToken() {
+  return localStorage.getItem(ACCESS_TOKEN_KEY)
 }
 
-function setToken(token) {
-  localStorage.setItem('access_token', token)
+export function getRefreshToken() {
+  return localStorage.getItem(REFRESH_TOKEN_KEY)
 }
 
-function clearToken() {
-  localStorage.removeItem('access_token')
+export function setTokens(accessToken, refreshToken) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken)
+  if (refreshToken !== undefined && refreshToken !== null) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+  }
 }
 
-// --- logout (единая точка) ---
+export function clearTokens() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY)
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
+}
 
+// ================== Выход (единая точка) ==================
 async function fullLogout() {
   try {
     await fetch(`${AUTH_BASE}/logout`, {
@@ -26,13 +33,11 @@ async function fullLogout() {
       credentials: 'include',
     })
   } catch { }
-
-  clearToken()
+  clearTokens()
   window.location.href = '/auth'
 }
 
-// --- refresh control ---
-
+// ================== Контроль рефреша ==================
 let refreshPromise = null
 
 async function tryRefresh() {
@@ -43,11 +48,9 @@ async function tryRefresh() {
           method: 'POST',
           credentials: 'include',
         })
-
         if (!res.ok) return false
-
         const data = await res.json()
-        setToken(data.access_token)
+        setTokens(data.access_token, getRefreshToken()) // сохраняем новый access и старый refresh
         return true
       } catch {
         return false
@@ -56,43 +59,48 @@ async function tryRefresh() {
       }
     })()
   }
-
   return refreshPromise
 }
 
-// --- core request ---
-
+// ================== Базовый запрос ==================
 async function request(base, path, options = {}, retry = true) {
   const headers = { ...options.headers }
 
-  // не ломаем FormData
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
 
-  const token = getToken()
+  const token = getAccessToken()
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(`${base}${path}`, {
+  let res = await fetch(`${base}${path}`, {
     ...options,
     headers,
     credentials: 'include',
   })
 
-  // --- 401 handling ---
+  // Обработка 401 (только для API, не для auth)
   if (res.status === 401 && base === API_BASE && retry) {
-    // если токена нет — смысла в refresh нет
-    if (!getToken()) {
+    if (!getAccessToken()) {
       await fullLogout()
       return res
     }
 
     const refreshed = await tryRefresh()
-
     if (refreshed) {
-      return request(base, path, options, false)
+      // повторяем запрос с новым токеном
+      const newHeaders = { ...options.headers }
+      if (!(options.body instanceof FormData)) {
+        newHeaders['Content-Type'] = 'application/json'
+      }
+      newHeaders['Authorization'] = `Bearer ${getAccessToken()}`
+      return fetch(`${base}${path}`, {
+        ...options,
+        headers: newHeaders,
+        credentials: 'include',
+      })
     }
 
     await fullLogout()
@@ -102,27 +110,27 @@ async function request(base, path, options = {}, retry = true) {
   return res
 }
 
-// --- json helper ---
-
+// ================== JSON-хелпер ==================
 async function json(base, path, options = {}) {
   const res = await request(base, path, options)
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({
-      error: res.statusText,
-    }))
-
+    let errBody
+    try {
+      errBody = await res.json()
+    } catch {
+      errBody = { error: res.statusText }
+    }
     throw Object.assign(
-      new Error(err.error || 'request failed'),
-      { status: res.status, data: err }
+      new Error(errBody.error || 'request failed'),
+      { status: res.status, data: errBody }
     )
   }
 
   return res.json()
 }
 
-// --- Auth service ---
-
+// ================== Auth-сервис ==================
 export const auth = {
   sendCode: (body) =>
     json(AUTH_BASE, '/send-code', {
@@ -146,10 +154,8 @@ export const auth = {
   },
 }
 
-// --- Main API ---
-
+// ================== API-сервис ==================
 export const api = {
-  // Профиль
   getProfile: () => json(API_BASE, '/profile'),
 
   updateProfile: (body) =>
@@ -161,25 +167,20 @@ export const api = {
   getAnswerHistory: (p) =>
     json(API_BASE, `/profile/answers?limit=${p?.limit || 20}&offset=${p?.offset || 0}`),
 
-  // Тесты
   getTests: (params = {}) => {
     const q = new URLSearchParams()
-
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined || v === null || v === '') continue
-
       if (Array.isArray(v)) {
         if (v.length) q.set(k, v.join(','))
       } else {
         q.set(k, v)
       }
     }
-
     return json(API_BASE, '/tests?' + q.toString())
   },
 
-  getTest: (id) =>
-    json(API_BASE, `/tests/${id}`),
+  getTest: (id) => json(API_BASE, `/tests/${id}`),
 
   createTest: (body) =>
     json(API_BASE, '/tests', {
@@ -213,29 +214,30 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // Мой ответ
+  updateTest: (id, body) =>
+    json(API_BASE, `/tests/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
   getMyAnswer: (testId) =>
     json(API_BASE, `/tests/${testId}/my-answer`),
 
-  // Импорт
   importGoogleForm: (url) =>
     json(API_BASE, '/import/google-forms', {
       method: 'POST',
       body: JSON.stringify({ url }),
     }),
 
-  // Админ
   setOfficial: (testId, official) =>
     json(API_BASE, `/admin/tests/${testId}/official`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify({ official }),
     }),
 
   setStatus: (testId, status) =>
     json(API_BASE, `/admin/tests/${testId}/status`, {
-      method: 'PUT',
+      method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
 }
-
-export { clearToken, getToken, setToken }

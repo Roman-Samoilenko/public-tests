@@ -20,6 +20,12 @@
           </span>
           <button :class="['vote-btn down', voted === -1 && 'active-down']" @click="vote(-1)">▼</button>
         </div>
+        <router-link
+          v-if="test && currentUserId && test.author_id === currentUserId"
+          :to="`/tests/${testId}/edit`"
+          class="btn-ghost"
+          style="font-size:0.8rem;font-family:var(--font-mono)"
+        >✎ Редактировать</router-link>
       </div>
     </div>
 
@@ -50,12 +56,23 @@
       </div>
     </form>
 
-    <!-- Результат -->
-    <div v-if="result" class="result-box">
-      <p class="result-label font-mono">Результат</p>
-      <p class="result-msg">Ответы сохранены.</p>
-      <!-- TODO v2: ResultDisplay компонент для детального отображения result_config -->
+    <!-- Результат после прохождения -->
+    <div v-if="result" class="result-saved-banner">
+      <span class="result-saved-icon">✓</span>
+      <span>Ответы сохранены</span>
     </div>
+    <ResultDisplay
+      v-if="result && parsedResult(result.result)"
+      :result="parsedResult(result.result)"
+      :result-config="parsedResultConfig(test.result_config)"
+    />
+
+    <!-- Результат предыдущего прохождения (до retake) -->
+    <ResultDisplay
+      v-else-if="alreadyDone && prevAnswer && parsedResult(prevAnswer.result)"
+      :result="parsedResult(prevAnswer.result)"
+      :result-config="parsedResultConfig(test.result_config)"
+    />
 
     <div class="divider"></div>
 
@@ -101,10 +118,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import QuestionRenderer from '../components/QuestionRenderer.vue'
 import { api } from '../api/index.js'
+import QuestionRenderer from '../components/QuestionRenderer.vue'
+import ResultDisplay from '../components/ResultDisplay.vue'
 import { authStore } from '../store/auth.js'
 
 const route  = useRoute()
@@ -147,6 +165,7 @@ async function loadComments() {
 }
 
 function retake() {
+  result.value = null
   if (prevAnswer.value?.answers) {
     try {
       answers.value = typeof prevAnswer.value.answers === 'string'
@@ -212,6 +231,20 @@ async function deleteComment(id) {
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+// Безопасно парсим JSON-строку result или возвращаем объект напрямую
+function parsedResult(raw) {
+  if (!raw) return null
+  if (typeof raw === 'object') return raw
+  try { return JSON.parse(raw) } catch { return null }
+}
+
+// result_config может прийти как объект или как JSON-строка
+function parsedResultConfig(raw) {
+  if (!raw) return null
+  if (typeof raw === 'object') return raw
+  try { return JSON.parse(raw) } catch { return null }
 }
 
 onMounted(async () => {
@@ -292,6 +325,20 @@ onMounted(async () => {
 }
 
 .submit-row { padding: 1.5rem 0 0.5rem; }
+
+.result-saved-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1.2rem;
+  background: rgba(78,184,122,0.08);
+  border: 1px solid rgba(78,184,122,0.2);
+  border-radius: 6px;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: var(--success);
+}
+.result-saved-icon { font-size: 1rem; }
 
 .result-box {
   padding: 1.5rem;

@@ -23,7 +23,7 @@ func NewProfileHandler(
 	return &ProfileHandler{profiles: profiles, answers: answers}
 }
 
-// GET /api/profile
+// GetProfile GET /api/profile
 // Возвращает демографический профиль текущего пользователя.
 func (h *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -38,7 +38,7 @@ func (h *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, profile)
 }
 
-// PUT /api/profile
+// UpdateProfile PUT /api/profile
 // Обновляет демографический профиль. Передавать нужно только изменяемые поля.
 //
 //	Body: {"age": 25, "gender": "M", "education": "higher"}
@@ -78,7 +78,7 @@ func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, profile)
 }
 
-// GET /api/profile/answers?limit=20&offset=0
+// GetAnswerHistory GET /api/profile/answers?limit=20&offset=0
 // История всех пройденных тестов текущего пользователя.
 func (h *ProfileHandler) GetAnswerHistory(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())

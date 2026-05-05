@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"quiz-platform/internal/domain"
 	authmw "quiz-platform/internal/middleware"
+	"quiz-platform/internal/scoring"
 )
 
 type TestHandler struct {
@@ -21,7 +23,7 @@ func NewTestHandler(tests domain.TestRepository, answers domain.AnswerRepository
 	return &TestHandler{tests: tests, answers: answers}
 }
 
-// GET /api/tests?sort=rating&limit=12&offset=0&search=...&tags=...&official=1&my=1&author_id=...
+// ListTests GET /api/tests?sort=rating&limit=12&offset=0&search=...&tags=...&official=1&my=1&author_id=...&status=(published|blocked)
 func (h *TestHandler) ListTests(w http.ResponseWriter, r *http.Request) {
 	sort := r.URL.Query().Get("sort")
 	if sort == "" {
@@ -38,6 +40,26 @@ func (h *TestHandler) ListTests(w http.ResponseWriter, r *http.Request) {
 
 	search := r.URL.Query().Get("search")
 
+	var userID int64
+	var isAdmin bool
+	if claims := authmw.ClaimsFromContext(r.Context()); claims != nil {
+		userID = claims.UserID
+		isAdmin = claims.IsAdmin
+	}
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		status = "published"
+	} else if status != "published" {
+		if !isAdmin {
+			writeError(w, http.StatusForbidden, "only admins can filter by non-published status")
+			return
+		}
+		if status != "blocked" && status != "all" {
+			writeError(w, http.StatusBadRequest, "invalid status value")
+			return
+		}
+	}
+
 	var tags []string
 	if tagsRaw := r.URL.Query().Get("tags"); tagsRaw != "" {
 		tags = strings.Split(tagsRaw, ",")
@@ -47,10 +69,7 @@ func (h *TestHandler) ListTests(w http.ResponseWriter, r *http.Request) {
 
 	// Определяем фильтр и userID для "my"
 	filter := "all"
-	var userID int64
-	if claims := authmw.ClaimsFromContext(r.Context()); claims != nil {
-		userID = claims.UserID
-	}
+
 	if r.URL.Query().Get("official") == "1" {
 		filter = "official"
 	} else if r.URL.Query().Get("my") == "1" {
@@ -66,6 +85,7 @@ func (h *TestHandler) ListTests(w http.ResponseWriter, r *http.Request) {
 		UserID:   userID,
 		Limit:    limit,
 		Offset:   offset,
+		Status:   status,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch tests")
@@ -74,7 +94,7 @@ func (h *TestHandler) ListTests(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// GET /api/tests/:id
+// GetTest GET /api/tests/:id.
 func (h *TestHandler) GetTest(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
@@ -82,7 +102,7 @@ func (h *TestHandler) GetTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	test, err := h.tests.GetByID(r.Context(), id)
-	if err == domain.ErrTestNotFound {
+	if errors.Is(err, domain.ErrTestNotFound) {
 		writeError(w, http.StatusNotFound, "test not found")
 		return
 	}
@@ -93,7 +113,7 @@ func (h *TestHandler) GetTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, test)
 }
 
-// POST /api/tests
+// CreateTest POST /api/tests.
 func (h *TestHandler) CreateTest(w http.ResponseWriter, r *http.Request) {
 	userID := authmw.ClaimsFromContext(r.Context()).UserID
 
@@ -119,7 +139,7 @@ func (h *TestHandler) CreateTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, test)
 }
 
-// GET /api/tests/:id/my-answer
+// GetMyAnswer GET /api/tests/:id/my-answer.
 func (h *TestHandler) GetMyAnswer(w http.ResponseWriter, r *http.Request) {
 	userID := authmw.ClaimsFromContext(r.Context()).UserID
 
@@ -138,7 +158,7 @@ func (h *TestHandler) GetMyAnswer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, answer)
 }
 
-// POST /api/tests/:id/answers
+// SubmitAnswer POST /api/tests/:id/answers.
 func (h *TestHandler) SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 	userID := authmw.ClaimsFromContext(r.Context()).UserID
 
@@ -147,27 +167,52 @@ func (h *TestHandler) SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid test id")
 		return
 	}
+
 	var body domain.SubmitAnswerRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	// result = nil в v1; вычисление появится в v2
-	result, err := h.tests.SubmitAnswer(r.Context(), testID, userID, body, nil)
+	// 1. Загружаем тест для получения Questions и ResultConfig
+	test, err := h.tests.GetByID(r.Context(), testID)
 	if err != nil {
-		switch err {
-		case domain.ErrTestNotFound:
+		if errors.Is(err, domain.ErrTestNotFound) {
+			writeError(w, http.StatusNotFound, "test not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "failed to fetch test")
+		}
+		return
+	}
+
+	// 2. Вызываем ядро подсчёта из пакета scoring
+	scoringResult, err := scoring.Calculate(
+		test.ResultConfig, // json.RawMessage
+		test.Questions,    // json.RawMessage
+		body.Answers,      // map[string]interface{}
+	)
+	if err != nil {
+		// ошибка парсинга конфигурации или вопросов — внутренняя ошибка
+		writeError(w, http.StatusInternalServerError, "scoring failed")
+		return
+	}
+
+	// 3. Сохраняем ответ вместе с результатом (может быть nil)
+	ar, err := h.tests.SubmitAnswer(r.Context(), testID, userID, body, scoringResult)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrTestNotFound):
 			writeError(w, http.StatusNotFound, "test not found")
 		default:
 			writeError(w, http.StatusInternalServerError, "failed to submit answer")
 		}
 		return
 	}
-	writeJSON(w, http.StatusCreated, result)
+
+	writeJSON(w, http.StatusCreated, ar)
 }
 
-// POST /api/tests/:id/vote
+// VoteTest POST /api/tests/:id/vote.
 func (h *TestHandler) VoteTest(w http.ResponseWriter, r *http.Request) {
 	userID := authmw.ClaimsFromContext(r.Context()).UserID
 
@@ -195,7 +240,7 @@ func (h *TestHandler) VoteTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// GET /api/tests/:id/comments
+// GetComments GetComments GET /api/tests/:id/comments.
 func (h *TestHandler) GetComments(w http.ResponseWriter, r *http.Request) {
 	testID, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
@@ -210,7 +255,7 @@ func (h *TestHandler) GetComments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, comments)
 }
 
-// POST /api/tests/:id/comments
+// AddComment POST /api/tests/:id/comments.
 func (h *TestHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	claims := authmw.ClaimsFromContext(r.Context())
 	userID := claims.UserID
@@ -246,7 +291,7 @@ func (h *TestHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, comment)
 }
 
-// DELETE /api/tests/:id/comments/:commentId
+// DELETE /api/tests/:id/comments/:commentId.
 func (h *TestHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	userID := authmw.ClaimsFromContext(r.Context()).UserID
 
@@ -262,10 +307,10 @@ func (h *TestHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.tests.DeleteComment(r.Context(), testID, commentID, userID); err != nil {
-		switch err {
-		case domain.ErrForbidden:
+		switch {
+		case errors.Is(err, domain.ErrForbidden):
 			writeError(w, http.StatusForbidden, "forbidden")
-		case domain.ErrNotFound:
+		case errors.Is(err, domain.ErrNotFound):
 			writeError(w, http.StatusNotFound, "comment not found")
 		default:
 			writeError(w, http.StatusInternalServerError, "failed to delete comment")
@@ -273,6 +318,47 @@ func (h *TestHandler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// UpdateTest PATCH /api/tests/:id
+func (h *TestHandler) UpdateTest(w http.ResponseWriter, r *http.Request) {
+	claims := authmw.ClaimsFromContext(r.Context())
+	userID := claims.UserID
+	isAdmin := claims.IsAdmin
+
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid test id")
+		return
+	}
+
+	var body domain.CreateTestRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.Title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	if len(body.Questions) == 0 || string(body.Questions) == "null" || string(body.Questions) == "[]" {
+		writeError(w, http.StatusBadRequest, "questions are required")
+		return
+	}
+
+	test, err := h.tests.UpdateTest(r.Context(), id, userID, isAdmin, body)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrTestNotFound):
+			writeError(w, http.StatusNotFound, "test not found")
+		case errors.Is(err, domain.ErrForbidden):
+			writeError(w, http.StatusForbidden, "forbidden")
+		default:
+			writeError(w, http.StatusInternalServerError, "failed to update test")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, test)
 }
 
 func parseID(s string) (int64, error) {
