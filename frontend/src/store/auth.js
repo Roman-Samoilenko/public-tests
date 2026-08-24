@@ -4,10 +4,20 @@ import { clearTokens, getAccessToken, setTokens } from '../api/index.js'
 
 function parseJWT(token) {
   try {
-    const payload = token.split('.')[1]
-    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    // Декодируем base64 в бинарную строку (Latin-1)
+    const binaryString = atob(base64);
+    // Превращаем её в массив байт (Uint8Array)
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    // Декодируем байты как UTF-8
+    const utf8String = new TextDecoder('utf-8').decode(bytes);
+    return JSON.parse(utf8String);
   } catch {
-    return null
+    return null;
   }
 }
 

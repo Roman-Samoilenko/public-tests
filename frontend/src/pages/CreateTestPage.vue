@@ -6,6 +6,24 @@
         {{ editMode ? '← К тесту' : '← Лента' }}
       </router-link>
       <h1 class="create-title">{{ editMode ? 'Редактировать тест' : 'Создать тест' }}</h1>
+      <div class="create-header-actions">
+  <button class="btn btn-outline" @click="showImport = !showImport">⊕ Импорт из Google Forms</button>
+</div>
+
+<!-- Панель импорта -->
+<div v-if="showImport" class="import-panel">
+  <div class="import-inner">
+    <p class="import-label">Импорт из Google Forms</p>
+    <div class="import-row">
+      <input v-model="importUrl" type="url" placeholder="https://docs.google.com/forms/d/..." />
+      <button class="btn" :disabled="importLoading" @click="doImport">
+        <span v-if="importLoading" class="spinner"></span>
+        <span v-else>Загрузить</span>
+      </button>
+    </div>
+    <p v-if="importError" class="error-msg">{{ importError }}</p>
+  </div>
+</div>
     </div>
 
     <div v-if="pageLoading" class="loading-state" style="min-height:40vh">
@@ -14,6 +32,7 @@
 
     <template v-else>
       <p v-if="error" class="error-msg" style="margin-bottom:1rem">{{ error }}</p>
+
 
       <!-- ─── Секция 1: Основная информация ─── -->
       <section class="section">
@@ -278,6 +297,8 @@ import { nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/index.js'
 import { authStore } from '../store/auth.js'
+import { useImportedTestStore } from '../store/importedTest.js'
+const importedStore = useImportedTestStore()
 
 const route  = useRouter()
 const router = useRouter()
@@ -290,6 +311,12 @@ const error      = ref('')
 const publishing = ref(false)
 const pageLoading = ref(editMode) // true только если редактируем — ждём загрузки
 const tagInput   = ref('')
+
+// Импорт из Google Forms
+const showImport = ref(false)
+const importUrl = ref('')
+const importError = ref('')
+const importLoading = ref(false)
 
 // флаг подавления watch во время загрузки формы
 const suppressWatch = ref(false)
@@ -348,18 +375,33 @@ watch(resultType, (val) => {
 
 // ── Загрузка теста для редактирования ──
 onMounted(async () => {
-  if (!editMode) return
-  try {
-    const test = await api.getTest(testId)
-    const userId = authStore.state.user?.id
-    if (test.author_id !== userId && !authStore.state.user?.isAdmin) {
-      router.push(`/tests/${testId}`)
-      return
+  if (editMode) {
+    // Режим редактирования – загружаем тест
+    try {
+      const test = await api.getTest(testId)
+      const userId = authStore.state.user?.id
+      if (test.author_id !== userId && !authStore.state.user?.isAdmin) {
+        router.push(`/tests/${testId}`)
+        return
+      }
+      prefillForm(test)
+    } catch {
+      router.push('/')
+    } finally {
+      pageLoading.value = false
     }
-    prefillForm(test)
-  } catch {
-    router.push('/')
-  } finally {
+  } else {
+    // Режим создания – проверяем импортированные данные
+    if (importedStore.data.value) {
+      const test = importedStore.data.value
+      prefillForm({
+        title: test.title,
+        description: test.description,
+        questions: test.questions,
+        // возможно, теги и др.
+      })
+      importedStore.clear() // очищаем после использования
+    }
     pageLoading.value = false
   }
 })
@@ -570,6 +612,36 @@ async function publish() {
     publishing.value = false
   }
 }
+
+async function doImport() {
+  importError.value = ''
+  if (!importUrl.value.trim()) {
+    importError.value = 'Введите ссылку'
+    return
+  }
+  importLoading.value = true
+  try {
+    const imported = await api.importGoogleForm(importUrl.value)
+    // Заполняем форму импортированными данными
+    prefillForm({
+      title: imported.title,
+      description: imported.description,
+      questions: imported.questions,
+      // при необходимости можно добавить tags, если они будут в ответе
+    })
+    // Очищаем стор, если там были данные (на случай, если пришли с ленты)
+    importedStore.clear()
+    showImport.value = false
+    importUrl.value = ''
+    // Можно добавить уведомление об успехе (опционально)
+    // error.value = 'Форма успешно импортирована'  // но error используется для ошибок, лучше сделать отдельную переменную
+  } catch (e) {
+    importError.value = e.data?.error || e.message || 'Не удалось импортировать форму'
+  } finally {
+    importLoading.value = false
+  }
+}
+
 </script>
 
 <style scoped>
@@ -578,6 +650,37 @@ async function publish() {
   display: inline-block; font-size: 0.78rem; letter-spacing: 0.06em;
   color: var(--text-muted); margin-bottom: 1.2rem; transition: color var(--transition);
 }
+
+.create-header-actions {
+  display: flex;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+/* Импорт */
+.import-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.2rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.import-inner { max-width: 600px; }
+.import-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.7rem;
+}
+.import-row {
+  display: flex;
+  gap: 0.8rem;
+  align-items: stretch;
+}
+.import-row input { flex: 1; }
+
 .back-link:hover { color: var(--accent); }
 .create-header { margin-bottom: 0; }
 .create-title { font-family: var(--font-serif); font-size: 2rem; font-weight: 700; margin-bottom: 1.5rem; }

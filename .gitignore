@@ -1,7 +1,6 @@
 nginx.prod.conf
 docker-compose.prod.yml
 .env
-*lock.json
 *.log
 *.tmp
 *.env

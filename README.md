@@ -417,75 +417,88 @@ CREATE TABLE refresh_tokens (
 
 ```mermaid
 erDiagram
-    profiles {
-        bigint user_id PK
-        smallint age
-        char gender
-        integer income
-        smallint children
-        varchar religion
-        varchar education
+    PROFILES {
+        bigint user_id PK "Ссылка на users.id в auth_db"
+        smallint age "Числовой признак"
+        char(1) gender "Категориальный признак"
+        integer income "Числовой признак"
+        smallint children "Числовой признак"
+        varchar(50) religion "Категориальный признак"
+        varchar(50) education "Категориальный признак"
         timestamptz updated_at
     }
 
-    tests {
+    TESTS {
         bigserial id PK
-        bigint author_id
-        varchar title
+        bigint author_id FK "Ссылка на users.id в auth_db"
+        varchar(200) title
         text description
-        jsonb questions
-        varchar status
+        jsonb questions "Структура вопросов"
+        varchar(20) status "published/blocked"
         boolean is_official
-        integer rating
+        integer rating "Вычисляется триггером"
         integer pass_count
-        text_array tags
+        text[] tags "GIN-индекс"
         jsonb result_config
-        tsvector search_vector
-        timestamptz created_at
-    }
-
-    test_answers {
-        bigserial id PK
-        bigint test_id FK
-        bigint user_id
-        jsonb answers
-        integer score
-        jsonb result
+        tsvector search_vector "GIN-индекс, автообновление"
         timestamptz created_at
         timestamptz updated_at
     }
 
-    test_votes {
-        bigint user_id PK
-        bigint test_id PK
-        smallint vote
+    TEST_ANSWERS {
+        bigserial id PK
+        bigint test_id FK "Ссылка на tests(id)"
+        bigint user_id "Ссылка на users.id в auth_db"
+        jsonb answers "Ответы на вопросы"
+        integer score "Вычисляемый балл"
+        jsonb result "Результат (интерпретация)"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    TEST_VOTES {
+        bigint user_id PK "Ссылка на users.id в auth_db"
+        bigint test_id PK "Ссылка на tests(id)"
+        smallint vote "1 или -1"
         timestamptz created_at
     }
 
-    test_comments {
+    TEST_COMMENTS {
         bigserial id PK
-        bigint test_id FK
-        bigint user_id
-        varchar nickname
-        text content
+        bigint test_id FK "Ссылка на tests(id)"
+        bigint user_id "Ссылка на users.id в auth_db"
+        varchar(100) nickname "Фиксируется из JWT"
+        text content "1-1000 символов"
         timestamptz created_at
     }
 
-    correlations {
+    MODERATION_LOG {
         bigserial id PK
-        varchar source_type
-        text source_id
-        varchar target_type
-        text target_id
-        real coeff
-        real p_value
-        integer sample_size
+        bigint test_id "Ссылка на tests(id)"
+        bigint author_id "Ссылка на users.id в auth_db"
+        varchar(200) title
+        varchar(50) action "created/blocked/unblocked"
+        timestamptz created_at
+    }
+
+    CORRELATIONS {
+        bigserial id PK
+        varchar(20) source_type "demographic/test_answer"
+        text source_id "Идентификатор признака"
+        varchar(20) target_type "demographic/test_answer"
+        text target_id "Идентификатор признака"
+        real coeff "Коэффициент корреляции"
+        real p_value "Статистическая значимость"
+        integer sample_size "Размер выборки"
         timestamptz computed_at
     }
 
-    tests ||--o{ test_answers : "has"
-    tests ||--o{ test_votes : "has"
-    tests ||--o{ test_comments : "has"
+    %% Связи
+    TESTS ||--o{ TEST_ANSWERS : "имеет ответы"
+    TESTS ||--o{ TEST_VOTES : "имеет голоса"
+    TESTS ||--o{ TEST_COMMENTS : "имеет комментарии"
+    PROFILES ||--o{ CORRELATIONS : "используется для корреляций"
+    TEST_ANSWERS ||--o{ CORRELATIONS : "используется для корреляций"
 ```
 
 ### Полнотекстовый поиск
@@ -696,212 +709,11 @@ Auth Service и Backend Service стартуют только после про�
 | `VITE_API_BASE` | Базовый URL API (если не через Nginx) | `/api` |
 | `NODE_ENV` | Окружение | `development` |
 
-### Быстрый старт
-
-```bash
-# Клонирование репозитория
-git clone https://github.com/username/public-tests.git
-cd public-tests
-
-# Запуск всего стека (dev)
-docker-compose -f docker-compose.yml -f docker-compose.override.yml up --build
-
-# Проверка статуса сервисов
-docker-compose ps
-
-# Открыть в браузере
-open http://localhost:8000
-```
-
-**Проверка работоспособности:**
-
-```bash
-# Health check Auth Service
-curl http://localhost:8081/health
-
-# Health check Backend Service
-curl http://localhost:8080/health
-
-# Тестовый запрос к API тестов
-curl http://localhost:8000/api/tests?sort=rating&limit=5
-
-# Запрос с авторизацией
-TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/verify \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","code":"123456"}' | jq -r .access_token)
-
-curl http://localhost:8000/api/profile \
-  -H "Authorization: Bearer $TOKEN"
-```
-
 ### Миграции базы данных
 
 Миграции применяются автоматически через `docker-entrypoint-initdb.d` при первом старте контейнеров PostgreSQL:
-
-```bash
-# postgres-auth: инициализация схемы аутентификации
-../auth-service/migrations/000001_init.up.sql
-
-# postgres-main: инициализация основной схемы
-./backend/migrations/000001_init.up.sql     # таблицы, индексы, триггер рейтинга
-./backend/migrations/000002_features.up.sql # теги, поиск, result_config, nickname
-```
-
 Порядок применения гарантирован числовым префиксом файлов.
 
-### Production развертывание
-
-```bash
-# Production конфигурация (без dev server)
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# Обязательные изменения перед production:
-# 1. JWT_SECRET — минимум 64 случайных байта
-openssl rand -hex 64
-
-# 2. CONTACT_PEPPER — уникальный случайный секрет
-openssl rand -hex 32
-
-# 3. Пароли PostgreSQL — уникальные надёжные пароли
-# 4. Включить SSL для PostgreSQL-соединений
-# 5. Настроить nginx.prod.conf с SSL termination
-```
-
-## Структура репозитория
-
-```text
-public-tests/
-├── auth-service/                       # Auth микросервис (Go)
-│   ├── cmd/app/main.go                # Entry point
-│   ├── internal/
-│   │   ├── handlers/                  # HTTP handlers (send-code, verify, refresh, logout)
-│   │   ├── service/                   # JWT generation, OTP logic
-│   │   └── storage/                   # PostgreSQL + Redis storage
-│   ├── pkg/
-│   │   ├── middleware/               # Logger, recovery, timeout
-│   │   └── reply.go                  # HTTP response helpers
-│   ├── migrations/
-│   │   └── 000001_init.up.sql        # users + refresh_tokens schema
-│   └── Dockerfile
-│
-├── backend/                            # Main backend (Go)
-│   ├── cmd/server/main.go             # Entry point + dependency injection
-│   ├── internal/
-│   │   ├── config/config.go           # Environment config
-│   │   ├── domain/domain.go           # Interfaces + domain types
-│   │   ├── handler/
-│   │   │   ├── router.go             # chi router setup + middleware
-│   │   │   ├── tests.go              # TestHandler (CRUD, votes, comments)
-│   │   │   ├── import.go             # ImportHandler (Google Forms)
-│   │   │   ├── profile.go            # ProfileHandler
-│   │   │   └── admin.go              # AdminHandler
-│   │   ├── middleware/auth.go         # JWT validation middleware
-│   │   ├── repository/postgres/
-│   │   │   ├── test.go               # TestRepository SQL
-│   │   │   ├── answer.go             # AnswerRepository SQL
-│   │   │   ├── profile.go            # ProfileRepository SQL
-│   │   │   └── db.go                 # Connection pool setup
-│   │   └── service/importer/
-│   │       └── google_forms.go       # Google Forms scraper + parser
-│   ├── migrations/
-│   │   ├── 000001_init.up.sql        # Полная схема main_db
-│   │   └── 000002_features.up.sql    # Теги, FTS, result_config
-│   └── Dockerfile
-│
-├── frontend/                           # Vue 3 SPA
-│   ├── src/
-│   │   ├── main.js                   # Vue app entry
-│   │   ├── App.vue                   # Root component
-│   │   ├── api/index.js              # API client + token management
-│   │   ├── router/index.js           # Vue Router + auth guards
-│   │   ├── store/auth.js             # Auth reactive state
-│   │   ├── components/
-│   │   │   ├── TestCard.vue          # Карточка теста в ленте
-│   │   │   └── QuestionRenderer.vue  # Рендер вопроса по типу
-│   │   └── pages/
-│   │       ├── AuthPage.vue          # Вход / регистрация (OTP flow)
-│   │       ├── FeedPage.vue          # Лента тестов с фильтрами
-│   │       ├── TestPage.vue          # Просмотр и прохождение теста
-│   │       ├── CreateTestPage.vue    # Конструктор тестов
-│   │       ├── ProfilePage.vue       # Личный кабинет
-│   │       └── AdminPage.vue         # Панель администратора
-│   ├── vite.config.js
-│   └── Dockerfile
-│
-├── docker-compose.yml                  # Production-ready сервисы
-├── docker-compose.override.yml         # Dev overrides (Vite dev server)
-├── docker-compose.prod.yml             # Production overrides
-├── nginx.conf                          # Production Nginx конфиг
-├── nginx.dev.conf                      # Development Nginx конфиг
-└── README.md
-```
-
-## Безопасность
-
-### Реализованные меры
-
-- JWT с HMAC-SHA256, TTL 15 минут для access token
-- bcrypt с индивидуальным PEPPER (защита от rainbow tables даже при утечке БД)
-- Раздельные базы данных Auth и Main — изоляция доменов
-- Refresh token rotation — каждый refresh выдаёт новый токен, старый инвалидируется
-- Middleware recovery — panic не приводит к утечке стек-трейсов
-- UNIQUE constraint на (test_id, user_id) в test_answers — один ответ на тест
-- PRIMARY KEY на (user_id, test_id) в test_votes — один голос на тест
-- CHECK constraint на content в комментариях — 1-1000 символов
-
-### Дорожная карта по безопасности
-
-- HTTPS/TLS termination в production Nginx (Let's Encrypt)
-- Rate limiting на `/api/auth/send-code` для защиты от OTP brute-force
-- CSRF protection для state-changing операций
-- Content Security Policy headers
-
-## Мониторинг
-
-### Health Checks
-
-Все три сервиса предоставляют `/health` endpoint для проверки работоспособности. В Docker Compose настроены healthcheck-зависимости для корректного порядка старта.
-
-### Логирование
-
-- **Auth Service:** JSON structured logs (log/slog), уровни Debug/Info/Error
-- **Backend Service:** JSON structured logs с контекстом запроса (user_id, request_id)
-- **Frontend:** консольный вывод ошибок API с кодами статусов
-
-### Метрики (Roadmap)
-
-- Prometheus exposition endpoint (`/metrics`) для бизнес-метрик
-- Количество созданных тестов, ответов, активных пользователей за период
-- Latency percentiles для каждого endpoint
-
-## Дорожная карта
-
-**v1 (текущее состояние):**
-
-- Создание и прохождение тестов с 6 типами вопросов
-- OTP-аутентификация через email
-- JWT с ротацией refresh tokens
-- Система голосований и комментариев
-- Импорт из Google Forms
-- Полнотекстовый поиск
-- Демографические профили
-- Инфраструктура корреляций (хранение)
-
-**v2 (в разработке):**
-
-- Автоматическое вычисление score на основе `result_config`
-- Текстовые интерпретации результатов по диапазонам
-- Background worker для пересчёта корреляций
-- Дашборд аналитики для создателей тестов
-- Экспорт данных в CSV/Excel
-
-**v3 (планируется):**
-
-- Kubernetes манифесты и Helm chart
-- Горизонтальное масштабирование Backend с Redis-кешем
-- Grafana дашборды поверх Prometheus
-- Email-рассылки через очередь задач
-- Публичное API для сторонних интеграций
 
 ## Лицензия
 

@@ -1,0 +1,210 @@
+/* ===== Общие классы ===== */
+.font-mono  { font-family: var(--font-mono); }
+.font-serif { font-family: var(--font-serif); }
+
+/* Кнопки */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.4rem;
+  background: var(--accent);
+  color: #0c0c0e;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--radius);
+  transition: opacity var(--transition), transform var(--transition);
+  white-space: nowrap;
+  border: none;
+  cursor: pointer;
+}
+.btn:hover  { opacity: 0.88; transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn:disabled { opacity: 0.4; pointer-events: none; }
+
+.btn-outline {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  transition: color var(--transition);
+}
+.btn-ghost:hover { color: var(--text); }
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* Теги */
+.tag {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.tag.official { background: rgba(78,184,122,0.12); color: var(--success); }
+
+/* Разделитель */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 1.5rem 0;
+}
+
+/* Поля ввода */
+.field { margin-bottom: 1.2rem; }
+.field-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+.field-hint {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+}
+
+/* Ошибка */
+.error-msg {
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  margin-top: 0.5rem;
+}
+
+/* Состояния загрузки/пустоты */
+.loading-state { display: flex; justify-content: center; padding: 4rem 0; }
+.empty-state   { padding: 3rem 0; color: var(--text-muted); text-align: center; }
+
+/* Кнопка "Назад" */
+.back-link {
+  display: inline-block;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 1.2rem;
+  transition: color var(--transition);
+}
+.back-link:hover { color: var(--accent); }
+
+/* Панель импорта */
+.import-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.2rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.import-inner { max-width: 600px; }
+.import-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.7rem;
+}
+.import-row {
+  display: flex;
+  gap: 0.8rem;
+  align-items: stretch;
+}
+.import-row input { flex: 1; }
+
+/* Превью импорта */
+.import-preview {
+  background: var(--bg-card);
+  border: 1px solid rgba(212,168,67,0.25);
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+.preview-title {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  margin: 0.3rem 0;
+}
+.preview-desc { font-size: 0.88rem; color: var(--text-muted); }
+.preview-actions { display: flex; gap: 1rem; align-items: center; }
+
+/* Фильтры и пагинация (используются на ленте) */
+.filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.8rem;
+  flex-wrap: wrap;
+}
+.filter-tabs { display: flex; gap: 0.3rem; }
+.filter-tab {
+  padding: 0.4rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  transition: all var(--transition);
+}
+.filter-tab:hover { color: var(--text); }
+.filter-tab.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.sort-select select { width: auto; }
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+}
+.page-btn {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+.page-btn:hover:not(:disabled) { color: var(--accent); }
+.page-btn:disabled { opacity: 0.3; }
+.page-info {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Сетка тестов (используется на ленте) */
+.tests-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}

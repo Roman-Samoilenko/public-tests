@@ -41,12 +41,9 @@
         </div>
       </div>
       <div class="preview-actions">
-        <button class="btn" :disabled="publishLoading" @click="publishImported">
-          <span v-if="publishLoading" class="spinner"></span>
-          <span v-else>Опубликовать →</span>
-        </button>
-        <button class="btn-ghost" @click="importedTest = null">Отмена</button>
-      </div>
+  <button class="btn" @click="editImported">Редактировать</button>
+  <button class="btn-ghost" @click="importedTest = null">Отмена</button>
+</div>
     </div>
 
     <!-- Поиск -->
@@ -135,7 +132,15 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/index.js'
 import TestCard from '../components/TestCard.vue'
+import { useImportedTestStore } from '../store/importedTest.js' // создайте такой стор
+const importedStore = useImportedTestStore()
 
+function editImported() {
+  // Сохраняем импортированные данные в стор
+  importedStore.setImportedTest(importedTest.value)
+  // Переходим на страницу создания
+  router.push('/create?import=true')
+}
 const router = useRouter()
 
 const tests   = ref([])
