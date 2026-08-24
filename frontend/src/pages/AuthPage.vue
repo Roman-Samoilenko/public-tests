@@ -242,18 +242,6 @@ async function verifyCode() {
 }
 .tab.active { background: var(--accent-dim); color: var(--accent); }
 
-.field { margin-bottom: 1.1rem; }
-.field label {
-  display: block;
-  font-size: 0.8rem;
-  font-family: var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 0.4rem;
-}
-.field .muted { color: var(--text-muted); font-family: var(--font-sans); text-transform: none; letter-spacing: 0; }
-
 .code-input {
   font-family: var(--font-mono);
   font-size: 1.6rem;

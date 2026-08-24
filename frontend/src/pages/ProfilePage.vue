@@ -305,15 +305,7 @@ onMounted(async () => {
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
-.field-label {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 0.3rem;
-}
+
 .field-value { font-size: 1rem; }
 
 /* Профиль — редактирование */
@@ -358,28 +350,6 @@ onMounted(async () => {
 .history-result { font-family: var(--font-mono); font-size: 0.78rem; color: var(--success); white-space: nowrap; }
 .history-score  { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); white-space: nowrap; }
 .history-date   { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
-
-.btn-retake {
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  color: var(--text-muted);
-  transition: color var(--transition);
-}
-.btn-retake:hover { color: var(--accent); }
-
-.loading-state { display: flex; justify-content: center; padding: 2.5rem 0; }
-.empty-state   { padding: 2rem 0; color: var(--text-muted); font-size: 0.85rem; }
-
-.pagination { display: flex; align-items: center; justify-content: center; gap: 1.5rem; }
-.page-btn {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  transition: color var(--transition);
-}
-.page-btn:hover:not(:disabled) { color: var(--accent); }
-.page-btn:disabled { opacity: 0.3; }
 
 .font-mono { font-family: var(--font-mono); }
 </style>

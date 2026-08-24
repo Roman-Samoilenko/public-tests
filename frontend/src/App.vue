@@ -123,69 +123,8 @@ input::placeholder, textarea::placeholder {
 select option { background: var(--bg-card); }
 
 /* ── Утилитарные компоненты ─────────────────────────── */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 1.4rem;
-  background: var(--accent);
-  color: #0c0c0e;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border-radius: var(--radius);
-  transition: opacity var(--transition), transform var(--transition);
-  white-space: nowrap;
-}
-.btn:hover  { opacity: 0.88; transform: translateY(-1px); }
-.btn:active { transform: translateY(0); }
-.btn:disabled { opacity: 0.4; pointer-events: none; }
 
-.btn-outline {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--accent);
-}
-.btn-ghost {
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font-sans);
-  font-size: 0.9rem;
-  transition: color var(--transition);
-}
-.btn-ghost:hover { color: var(--text); }
-.btn-danger {
-  background: var(--danger);
-  color: #fff;
-}
 
-.tag {
-  display: inline-block;
-  padding: 0.15rem 0.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border-radius: 2px;
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-.tag.official { background: rgba(78,184,122,0.12); color: var(--success); }
-
-.divider {
-  height: 1px;
-  background: var(--border);
-  margin: 1.5rem 0;
-}
-
-.error-msg {
-  color: var(--danger);
-  font-size: 0.85rem;
-  font-family: var(--font-mono);
-  margin-top: 0.5rem;
-}
 
 .spinner {
   width: 20px; height: 20px;

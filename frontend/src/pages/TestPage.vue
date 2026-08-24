@@ -267,15 +267,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.back-link {
-  display: inline-block;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin-bottom: 1.2rem;
-  transition: color var(--transition);
-}
-.back-link:hover { color: var(--accent); }
 
 .test-header { margin-bottom: 0; }
 .test-tags { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; flex-wrap: wrap; }
@@ -396,7 +387,6 @@ onMounted(async () => {
 .comment-delete { font-size: 0.75rem; margin-left: auto; }
 .comment-text   { font-size: 0.9rem; line-height: 1.5; }
 
-.loading-state { display: flex; justify-content: center; padding: 3rem 0; }
 .font-mono { font-family: var(--font-mono); }
 .font-serif { font-family: var(--font-serif); }
 </style>

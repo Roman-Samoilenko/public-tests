@@ -1,3 +1,21 @@
+:root {
+  --bg: #0c0c0e;
+  --bg-card: #13131a;
+  --bg-input: #1a1a24;
+  --border: rgba(255,255,255,0.08);
+  --text: #e8e6df;
+  --text-muted: #7a7870;
+  --accent: #d4a843;
+  --accent-dim: rgba(212,168,67,0.12);
+  --danger: #e05a4e;
+  --success: #4eb87a;
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --radius: 4px;
+  --transition: 160ms ease;
+}
+
 /* ===== Общие классы ===== */
 .font-mono  { font-family: var(--font-mono); }
 .font-serif { font-family: var(--font-serif); }

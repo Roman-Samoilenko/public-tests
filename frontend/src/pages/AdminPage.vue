@@ -72,13 +72,13 @@
     </div>
 
     <!-- Пагинация -->
-    <div v-if="total > limit" class="pagination" style="margin-top:1.5rem">
-      <button class="page-btn" :disabled="offset === 0" @click="changePage(-1)">← Назад</button>
-      <span class="font-mono" style="font-size:0.8rem;color:var(--text-muted)">
-        {{ Math.floor(offset / limit) + 1 }} / {{ Math.ceil(total / limit) }}
-      </span>
-      <button class="page-btn" :disabled="offset + limit >= total" @click="changePage(1)">Вперёд →</button>
-    </div>
+<div v-if="total > params.limit" class="pagination" style="margin-top:1.5rem">
+  <button class="page-btn" :disabled="params.offset === 0" @click="changePage(-1)">← Назад</button>
+  <span class="font-mono" style="font-size:0.8rem;color:var(--text-muted)">
+    {{ Math.floor(params.offset / params.limit) + 1 }} / {{ Math.ceil(total / params.limit) }}
+  </span>
+  <button class="page-btn" :disabled="params.offset + params.limit >= total" @click="changePage(1)">Вперёд →</button>
+</div>
 
     <p v-if="actionError" class="error-msg" style="margin-top:1rem">{{ actionError }}</p>
 
@@ -88,34 +88,19 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { api } from '../api/index.js'
+import { useTests } from '../composables/useTests.js'
 
-const tests       = ref([])
-const total       = ref(0)
-const loading     = ref(false)
+// Используем композабл с параметрами админки
+const { tests, total, loading, params, loadTests, changePage } = useTests({
+  limit: 50,
+  status: 'all', // загружаем все тесты, включая заблокированные
+})
+
+// Состояния для действий (оставляем локальными)
 const actionLoading = ref('')
 const actionError = ref('')
-const limit       = 50
-const offset      = ref(0)
 
-async function loadTests() {
-  loading.value = true
-  try {
-    // Загружаем все тесты, включая заблокированные (для админа)
-    const data = await api.getTests({ limit, offset: offset.value, status: 'all' })
-    tests.value = data.items || []
-    total.value = data.total || 0
-  } catch (e) {
-    console.error(e)
-  } finally {
-    loading.value = false
-  }
-}
-
-function changePage(dir) {
-  offset.value = Math.max(0, offset.value + dir * limit)
-  loadTests()
-}
-
+// Действия (без изменений, только используют api)
 async function toggleOfficial(t) {
   actionError.value = ''
   actionLoading.value = t.id + '_official'
@@ -238,18 +223,6 @@ onMounted(() => loadTests())
 .action-block:hover:not(:disabled)   { color: var(--danger); border-color: var(--danger); }
 .action-unblock:hover:not(:disabled) { color: var(--success); border-color: var(--success); }
 
-.loading-state { display: flex; justify-content: center; padding: 4rem 0; }
-.empty-state   { padding: 3rem 0; color: var(--text-muted); text-align: center; }
-
-.pagination { display: flex; align-items: center; justify-content: center; gap: 1.5rem; }
-.page-btn {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  transition: color var(--transition);
-}
-.page-btn:hover:not(:disabled) { color: var(--accent); }
-.page-btn:disabled { opacity: 0.3; }
 
 .font-mono { font-family: var(--font-mono); }
 </style>

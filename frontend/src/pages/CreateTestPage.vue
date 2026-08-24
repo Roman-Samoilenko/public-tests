@@ -7,7 +7,7 @@
       </router-link>
       <h1 class="create-title">{{ editMode ? 'Редактировать тест' : 'Создать тест' }}</h1>
       <div class="create-header-actions">
-  <button class="btn btn-outline" @click="showImport = !showImport">⊕ Импорт из Google Forms</button>
+  <button class="btn btn-outline" @click="showImport = !showImport">⊕ Импорт</button>
 </div>
 
 <!-- Панель импорта -->
@@ -613,43 +613,11 @@ async function publish() {
   }
 }
 
-async function doImport() {
-  importError.value = ''
-  if (!importUrl.value.trim()) {
-    importError.value = 'Введите ссылку'
-    return
-  }
-  importLoading.value = true
-  try {
-    const imported = await api.importGoogleForm(importUrl.value)
-    // Заполняем форму импортированными данными
-    prefillForm({
-      title: imported.title,
-      description: imported.description,
-      questions: imported.questions,
-      // при необходимости можно добавить tags, если они будут в ответе
-    })
-    // Очищаем стор, если там были данные (на случай, если пришли с ленты)
-    importedStore.clear()
-    showImport.value = false
-    importUrl.value = ''
-    // Можно добавить уведомление об успехе (опционально)
-    // error.value = 'Форма успешно импортирована'  // но error используется для ошибок, лучше сделать отдельную переменную
-  } catch (e) {
-    importError.value = e.data?.error || e.message || 'Не удалось импортировать форму'
-  } finally {
-    importLoading.value = false
-  }
-}
 
 </script>
 
 <style scoped>
 /* Стили полностью идентичны оригинальному CreateTestPage — вставьте блок <style> без изменений */
-.back-link {
-  display: inline-block; font-size: 0.78rem; letter-spacing: 0.06em;
-  color: var(--text-muted); margin-bottom: 1.2rem; transition: color var(--transition);
-}
 
 .create-header-actions {
   display: flex;
@@ -657,41 +625,10 @@ async function doImport() {
   margin-bottom: 1rem;
 }
 
-/* Импорт */
-.import-panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 1.2rem 1.5rem;
-  margin-bottom: 1.5rem;
-}
-.import-inner { max-width: 600px; }
-.import-label {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 0.7rem;
-}
-.import-row {
-  display: flex;
-  gap: 0.8rem;
-  align-items: stretch;
-}
-.import-row input { flex: 1; }
-
-.back-link:hover { color: var(--accent); }
 .create-header { margin-bottom: 0; }
 .create-title { font-family: var(--font-serif); font-size: 2rem; font-weight: 700; margin-bottom: 1.5rem; }
 .section { margin-bottom: 0; }
 .section-title { font-family: var(--font-serif); font-size: 1.3rem; font-weight: 600; margin-bottom: 1.2rem; }
-.field { margin-bottom: 1.2rem; }
-.field-label {
-  display: block; font-family: var(--font-mono); font-size: 0.68rem;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.4rem;
-}
-.field-hint { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); margin-top: 0.3rem; }
 .tags-input {
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-input);
   padding: 0.4rem 0.6rem; display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
@@ -773,6 +710,5 @@ async function doImport() {
 .scoring-label { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; color: var(--text-muted); white-space: nowrap; }
 .scoring-input { width: 80px !important; font-size: 0.85rem; padding: 0.3rem 0.5rem; }
 .scoring-hint { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); opacity: 0.6; }
-.loading-state { display: flex; justify-content: center; padding: 3rem 0; }
 .font-mono { font-family: var(--font-mono); }
 </style>

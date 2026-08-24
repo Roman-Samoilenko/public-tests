@@ -130,15 +130,7 @@
 <script setup></script>
 
 <style scoped>
-.back-link {
-  display: inline-block; font-size: 0.78rem; letter-spacing: 0.06em;
-  color: var(--text-muted); margin-bottom: 1.2rem; transition: color var(--transition);
-}
-.back-link:hover { color: var(--accent); }
-.legal-label {
-  font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.15em;
-  text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 0.5rem;
-}
+
 .legal-title {
   font-family: var(--font-serif); font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem;
 }
