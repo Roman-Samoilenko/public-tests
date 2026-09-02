@@ -24,7 +24,7 @@ func NewProfileHandler(
 }
 
 // GetProfile GET /api/profile
-// Возвращает демографический профиль текущего пользователя.
+// Возвращает профиль текущего пользователя.
 func (h *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 
@@ -39,7 +39,7 @@ func (h *ProfileHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateProfile PUT /api/profile
-// Обновляет демографический профиль. Передавать нужно только изменяемые поля.
+// Обновляет профиль. Передавать нужно только изменяемые поля.
 //
 //	Body: {"age": 25, "gender": "M", "education": "higher"}
 func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {

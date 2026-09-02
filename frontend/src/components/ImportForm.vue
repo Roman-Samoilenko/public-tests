@@ -61,6 +61,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/index.js'
 import { useImportedTestStore } from '../store/importedTest.js'
+import { computed } from 'vue'
+
 
 const router = useRouter()
 const store = useImportedTestStore()
@@ -68,8 +70,8 @@ const store = useImportedTestStore()
 // Список доступных источников
 const sources = [
   { key: 'google', label: 'Google Forms' },
-  { key: 'json', label: 'JSON' },
-  { key: 'csv', label: 'CSV' },
+  // { key: 'json', label: 'JSON' },
+  // { key: 'csv', label: 'CSV' },
   // можно добавить 'yandex', 'typeform' и т.д.
 ]
 const selectedSource = ref('google')
@@ -80,6 +82,10 @@ const file = ref(null)
 const error = ref('')
 const loading = ref(false)
 const importedTest = ref(null)
+
+const currentSource = computed(() => {
+  return sources.find(s => s.key === selectedSource.value) || sources[0]
+})
 
 // Логика импорта
 async function doImport() {
@@ -111,10 +117,22 @@ async function importFromCSV() {
 }
 
 // Общие действия
+
+const props = defineProps({
+  redirect: { type: Boolean, default: true }
+})
+const emit = defineEmits(['imported'])
+
 function editImported() {
-  store.setImportedTest(importedTest.value)
-  router.push('/create?import=true')
+  if (props.redirect) {
+    store.setImportedTest(importedTest.value)
+    router.push('/create?import=true')
+  } else {
+    emit('imported', importedTest.value)
+    reset()
+  }
 }
+
 function reset() {
   importedTest.value = null
   url.value = ''

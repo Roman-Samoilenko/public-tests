@@ -27,13 +27,14 @@ var reFormData = regexp.MustCompile(`FB_PUBLIC_LOAD_DATA_\s*=\s*(\[[\s\S]*?\]);\
 const (
 	gfTypeShortText = 0
 	gfTypeParagraph = 1
-	gfTypeRadio     = 2 // single choice
-	gfTypeCheckbox  = 3 // multiple choice
-	gfTypeDropdown  = 4 // single choice
+	gfTypeRadio     = 2 // одиночный выбор
+	gfTypeDropdown  = 3 // одиночный выбор (выпадающий список)
+	gfTypeCheckbox  = 4 // множественный выбор (флажки)
 	gfTypeScale     = 5 // linear scale
 	gfTypeGrid      = 7 // multiple choice grid → vector_scale
 	gfTypeDate      = 9
 	gfTypeTime      = 10
+	gfTypeRating    = 18
 )
 
 // GoogleFormsImporter получает и парсит публичные Google Forms.
@@ -255,6 +256,10 @@ func parseFormData(data []any) (*domain.ImportedTest, error) {
 			// Пропускаем нераспознанный вопрос, не падаем
 			continue
 		}
+		if q == nil {
+			slog.Debug("skipping non-question item", "index", i)
+			continue
+		}
 		if q.ID == "" {
 			q.ID = fmt.Sprintf("q%d", i+1)
 		}
@@ -291,6 +296,10 @@ func parseQuestion(q []any) (*domain.Question, error) {
 	}
 
 	switch qType {
+
+	case 6, 8, 11, 12:
+		return nil, nil
+
 	case gfTypeShortText, gfTypeParagraph:
 		result.Type = domain.QuestionTypeText
 
@@ -311,16 +320,92 @@ func parseQuestion(q []any) (*domain.Question, error) {
 		result.MaxLabel = maxLabel
 
 	case gfTypeGrid:
+		rows, cols, multi := parseGrid(q)
 		result.Type = domain.QuestionTypeVectorScale
-		rows, cols := parseGrid(q)
 		result.Rows = rows
 		result.Cols = cols
+		result.GridMultiple = multi
+		// Сохраняем флаг множественного выбора в отдельном поле, если нужно
+		// Можно добавить в Question структуру поле GridMultiple bool
+		// Но проще на фронтенде определить по типу options?
+		// Но для сетки варианты не хранятся как options.
+		// Предлагаю добавить в domain.Question поле GridMultiple, или оставить векторную шкалу,
+		// а на фронтенде по наличию rows/cols и отсутствию options определять как сетку.
+
+	case gfTypeRating:
+		result.Type = domain.QuestionTypeScale
+		minVal, maxVal := parseRatingRange(q)
+		result.MinValue = &minVal
+		result.MaxValue = &maxVal
 
 	default:
 		result.Type = domain.QuestionTypeText
 	}
 
 	return result, nil
+}
+
+func parseRatingRange(q []any) (minVal, maxVal int) {
+	minVal = 1
+	maxVal = 5
+	subBlocks, err := getArray(q, 4)
+	if err != nil || len(subBlocks) == 0 {
+		return
+	}
+	firstSub, ok := subBlocks[0].([]any)
+	if !ok || len(firstSub) < 2 {
+		return
+	}
+	optList, err := getArray(firstSub, 1)
+	if err != nil || len(optList) == 0 {
+		return
+	}
+	maxVal = len(optList)
+	return
+}
+func parseGrid(q []any) (rows, cols []string, multiple bool) {
+	subBlocks, err := getArray(q, 4)
+	if err != nil || len(subBlocks) == 0 {
+		return
+	}
+	// Берём первый блок строки для извлечения столбцов
+	firstRowBlock, ok := subBlocks[0].([]any)
+	if !ok || len(firstRowBlock) < 4 {
+		return
+	}
+	// Столбцы – индекс 1 (массив массивов)
+	if colList, err := getArray(firstRowBlock, 1); err == nil {
+		for _, c := range colList {
+			if arr, ok := c.([]any); ok && len(arr) > 0 {
+				if text, ok := arr[0].(string); ok && text != "" {
+					cols = append(cols, text)
+				}
+			}
+		}
+	}
+	// Проходим по всем строкам для извлечения названий строк и флага multiple
+	for _, rowBlock := range subBlocks {
+		rArr, ok := rowBlock.([]any)
+		if !ok || len(rArr) < 4 {
+			continue
+		}
+		// Название строки – индекс 3 (массив)
+		if nameArr, err := getArray(rArr, 3); err == nil && len(nameArr) > 0 {
+			if name, ok := nameArr[0].(string); ok && name != "" {
+				rows = append(rows, name)
+			}
+		}
+		// Флаг множественного выбора – последний элемент (обычно bool)
+		// Флаг "множественный выбор" — массив [0] или [1] в последнем элементе строки
+		if len(rArr) > 0 {
+			if flagArr, ok := rArr[len(rArr)-1].([]any); ok && len(flagArr) > 0 {
+				if f, ok := flagArr[0].(float64); ok && f == 1 {
+					multiple = true
+				}
+			}
+		}
+	}
+	return
 }
 
 // parseOptions извлекает варианты ответов из вопроса типа radio/checkbox/dropdown.
@@ -379,13 +464,17 @@ func parseScale(q []any) (minL, maxL int, minLabel, maxLabel string) {
 	}
 
 	if v, ok := optList[0].([]any); ok && len(v) > 0 {
-		if f, ok := v[0].(float64); ok {
-			minL = int(f)
+		if s, ok := v[0].(string); ok {
+			if n, convErr := strconv.Atoi(s); convErr == nil {
+				minL = n
+			}
 		}
 	}
 	if v, ok := optList[len(optList)-1].([]any); ok && len(v) > 0 {
-		if f, ok := v[0].(float64); ok {
-			maxL = int(f)
+		if s, ok := v[0].(string); ok {
+			if n, convErr := strconv.Atoi(s); convErr == nil {
+				maxL = n
+			}
 		}
 	}
 
@@ -397,40 +486,6 @@ func parseScale(q []any) (minL, maxL int, minLabel, maxLabel string) {
 		maxLabel, _ = firstSub[4].(string)
 	}
 	return minL, maxL, minLabel, maxLabel
-}
-
-func parseGrid(q []any) (rows, cols []string) {
-	subBlocks, err := getArray(q, 4)
-	if err != nil || len(subBlocks) < 2 {
-		return rows, cols
-	}
-
-	// rows — из первого subblock
-	if firstSub, ok := subBlocks[0].([]any); ok && len(firstSub) > 1 {
-		if rowList, err := getArray(firstSub, 1); err == nil {
-			for _, r := range rowList {
-				if arr, ok := r.([]any); ok && len(arr) > 0 {
-					if text, ok := arr[0].(string); ok && text != "" {
-						rows = append(rows, text)
-					}
-				}
-			}
-		}
-	}
-
-	// cols — из второго subblock
-	if secondSub, ok := subBlocks[1].([]any); ok && len(secondSub) > 1 {
-		if colList, err := getArray(secondSub, 1); err == nil {
-			for _, c := range colList {
-				if arr, ok := c.([]any); ok && len(arr) > 0 {
-					if text, ok := arr[0].(string); ok && text != "" {
-						cols = append(cols, text)
-					}
-				}
-			}
-		}
-	}
-	return rows, cols
 }
 
 // --- утилиты для работы с []any ---

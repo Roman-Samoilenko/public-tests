@@ -78,14 +78,17 @@
         <div v-for="row in question.rows" :key="row" class="grid-row">
           <div class="grid-row-label">{{ row }}</div>
           <div v-for="col in question.cols" :key="col" class="grid-cell">
-            <label :class="['scale-opt small', (modelValue || {})[row] === col && 'selected']">
-              <input type="radio" :name="`q${question.id}_${row}`" :value="col"
-                :checked="(modelValue || {})[row] === col"
-                @change="updateGrid(row, col)"
-              />
-              <span class="scale-num">·</span>
-            </label>
-          </div>
+  <label :class="['scale-opt small', isGridSelected(row, col) && 'selected']">
+    <input
+      :type="question.grid_multiple ? 'checkbox' : 'radio'"
+      :name="`q${question.id}_${row}`"
+      :value="col"
+      :checked="isGridSelected(row, col)"
+      @change="updateGrid(row, col)"
+    />
+    <span class="scale-num">·</span>
+  </label>
+</div>
         </div>
       </div>
     </div>
@@ -116,10 +119,23 @@ function toggleMulti(id) {
   else cur.splice(idx, 1)
   emit('update:modelValue', cur)
 }
+function isGridSelected(row, col) {
+  const val = (props.modelValue || {})[row]
+  return props.question.grid_multiple
+    ? Array.isArray(val) && val.includes(col)
+    : val === col
+}
 
 function updateGrid(row, col) {
   const cur = props.modelValue && typeof props.modelValue === 'object' ? { ...props.modelValue } : {}
-  cur[row] = col
+  if (props.question.grid_multiple) {
+    const arr = Array.isArray(cur[row]) ? [...cur[row]] : []
+    const idx = arr.indexOf(col)
+    idx === -1 ? arr.push(col) : arr.splice(idx, 1)
+    cur[row] = arr
+  } else {
+    cur[row] = col
+  }
   emit('update:modelValue', cur)
 }
 </script>

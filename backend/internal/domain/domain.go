@@ -42,17 +42,18 @@ type QuestionOption struct {
 
 // Question — один вопрос теста.
 type Question struct {
-	ID       string           `json:"id"`
-	Text     string           `json:"text"`
-	Type     QuestionType     `json:"type"`
-	Required bool             `json:"required"`
-	Options  []QuestionOption `json:"options,omitempty"`
-	MinValue *int             `json:"min,omitempty"`
-	MaxValue *int             `json:"max,omitempty"`
-	MinLabel string           `json:"min_label,omitempty"`
-	MaxLabel string           `json:"max_label,omitempty"`
-	Rows     []string         `json:"rows,omitempty"`
-	Cols     []string         `json:"cols,omitempty"`
+	ID           string           `json:"id"`
+	Text         string           `json:"text"`
+	Type         QuestionType     `json:"type"`
+	Required     bool             `json:"required"`
+	Options      []QuestionOption `json:"options,omitempty"`
+	MinValue     *int             `json:"min,omitempty"`
+	MaxValue     *int             `json:"max,omitempty"`
+	MinLabel     string           `json:"min_label,omitempty"`
+	MaxLabel     string           `json:"max_label,omitempty"`
+	Rows         []string         `json:"rows,omitempty"`
+	Cols         []string         `json:"cols,omitempty"`
+	GridMultiple bool             `json:"grid_multiple,omitempty"`
 }
 
 // -------------------------------------------------------

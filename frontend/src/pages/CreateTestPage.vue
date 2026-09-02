@@ -12,17 +12,7 @@
 
 <!-- Панель импорта -->
 <div v-if="showImport" class="import-panel">
-  <div class="import-inner">
-    <p class="import-label">Импорт из Google Forms</p>
-    <div class="import-row">
-      <input v-model="importUrl" type="url" placeholder="https://docs.google.com/forms/d/..." />
-      <button class="btn" :disabled="importLoading" @click="doImport">
-        <span v-if="importLoading" class="spinner"></span>
-        <span v-else>Загрузить</span>
-      </button>
-    </div>
-    <p v-if="importError" class="error-msg">{{ importError }}</p>
-  </div>
+  <ImportForm @imported="handleImported" :redirect="false" />
 </div>
     </div>
 
@@ -103,6 +93,7 @@
                     <option value="multiple">Несколько вариантов</option>
                     <option value="scale">Шкала</option>
                     <option value="text">Текстовый ответ</option>
+                    <option value="vector_scale">Матрица</option>
                   </select>
                 </div>
                 <label class="required-check">
@@ -151,6 +142,33 @@
                   <input v-model.number="q.max" type="number" style="width:80px" />
                 </div>
               </div>
+
+<div v-if="q.type === 'vector_scale'" class="grid-editor">
+  <div class="grid-rows">
+    <span class="field-label font-mono">Сстроки:</span>
+    <div v-for="(row, ri) in q.rows" :key="ri" class="grid-row-item">
+      <input v-model="q.rows[ri]" type="text" placeholder="Строка" />
+      <button class="ctrl-btn ctrl-danger" @click="removeRow(q, ri)" :disabled="q.rows.length <= 1">×</button>
+    </div>
+    <button class="btn-ghost add-option-btn" @click="addRow(q)">+ строка</button>
+  </div>
+  <div class="grid-cols">
+    <span class="field-label font-mono">Столбцы:</span>
+    <div v-for="(col, ci) in q.cols" :key="ci" class="grid-col-item">
+      <input v-model="q.cols[ci]" type="text" placeholder="Колонка" />
+      <button class="ctrl-btn ctrl-danger" @click="removeCol(q, ci)" :disabled="q.cols.length <= 1">×</button>
+    </div>
+    <button class="btn-ghost add-option-btn" @click="addCol(q)">+ столбец</button>
+  </div>
+  <div class="grid-type">
+    <label>
+      <input type="radio" v-model="q.gridMultiple" :value="false" /> Одиночный выбор
+    </label>
+    <label>
+      <input type="radio" v-model="q.gridMultiple" :value="true" /> Множественный выбор
+    </label>
+  </div>
+</div>
 
               <!-- Коэффициенты шкального вопроса -->
               <div v-if="q.type === 'scale' && resultType !== 'none'" class="scoring-row scoring-row-scale">
@@ -286,6 +304,8 @@
           <span v-if="publishing" class="spinner"></span>
           <span v-else>{{ editMode ? 'Сохранить изменения →' : 'Опубликовать тест →' }}</span>
         </button>
+        <p v-if="error" class="error-msg" style="margin-bottom:1rem">{{ error }}</p>
+
       </div>
     </template>
 
@@ -298,6 +318,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/index.js'
 import { authStore } from '../store/auth.js'
 import { useImportedTestStore } from '../store/importedTest.js'
+import ImportForm from '../components/ImportForm.vue'
+import { reverseMapType } from '../utils/helpers.js'
+
+function handleImported(testData) {
+  prefillForm(testData)
+  showImport.value = false
+}
+
 const importedStore = useImportedTestStore()
 
 const route  = useRouter()
@@ -314,9 +342,6 @@ const tagInput   = ref('')
 
 // Импорт из Google Forms
 const showImport = ref(false)
-const importUrl = ref('')
-const importError = ref('')
-const importLoading = ref(false)
 
 // флаг подавления watch во время загрузки формы
 const suppressWatch = ref(false)
@@ -340,10 +365,28 @@ function makeQuestion() {
       { id: crypto.randomUUID(), text: '', scoring: {} },
       { id: crypto.randomUUID(), text: '', scoring: {} },
     ],
+    rows: [],
+    cols: [],
+    gridMultiple: false,
     min: 1,
     max: 10,
+    minLabel: '',
+    maxLabel: '',
     scoring: {},
   }
+}
+
+function addRow(q) {
+  q.rows.push('')
+}
+function removeRow(q, idx) {
+  if (q.rows.length > 1) q.rows.splice(idx, 1)
+}
+function addCol(q) {
+  q.cols.push('')
+}
+function removeCol(q, idx) {
+  if (q.cols.length > 1) q.cols.splice(idx, 1)
 }
 
 const form = reactive({
@@ -394,47 +437,86 @@ onMounted(async () => {
     // Режим создания – проверяем импортированные данные
     if (importedStore.data.value) {
       const test = importedStore.data.value
-      prefillForm({
-        title: test.title,
-        description: test.description,
-        questions: test.questions,
-        // возможно, теги и др.
-      })
+      prefillForm(test)
       importedStore.clear() // очищаем после использования
     }
     pageLoading.value = false
   }
 })
 
-function reverseMapType(t) {
-  return { single_choice: 'single', multiple_choice: 'multiple', scale: 'scale', text: 'text' }[t] || 'single'
-}
 
 function prefillForm(test) {
+  
   suppressWatch.value = true
 
   form.title       = test.title || ''
   form.description = test.description || ''
   form.tags        = [...(test.tags || [])]
 
+  
   const qs = (typeof test.questions === 'string'
     ? JSON.parse(test.questions)
     : test.questions) || []
+  console.log('Импортированные вопросы:', qs)
 
-  form.questions = qs.map(q => ({
-    id:       q.id || crypto.randomUUID(),
-    text:     q.text || '',
-    type:     reverseMapType(q.type),
-    required: !!q.required,
-    min:      q.min ?? 1,
-    max:      q.max ?? 10,
-    scoring:  q.scoring ? { ...q.scoring } : {},
-    options:  (q.options || []).map(o => ({
-      id:      o.id || crypto.randomUUID(),
-      text:    o.text || '',
-      scoring: o.scoring ? { ...o.scoring } : {},
-    })),
-  }))
+  form.questions = qs.map(q => {
+    const type = reverseMapType(q.type)
+    const base = {
+      id:       q.id || crypto.randomUUID(),
+      text:     q.text || '',
+      type:     type,
+      required: !!q.required,
+      scoring:  q.scoring ? { ...q.scoring } : {},
+    }
+
+    // Заполняем в зависимости от типа
+    if (type === 'single' || type === 'multiple') {
+      base.options = (q.options || []).map(o => ({
+        id:      o.id || crypto.randomUUID(),
+        text:    o.text || '',
+        scoring: o.scoring ? { ...o.scoring } : {},
+      }))
+      // Для single/multiple дополнительные поля не нужны
+      base.min = 1
+      base.max = 10
+      base.rows = []
+      base.cols = []
+      base.gridMultiple = false
+      base.minLabel = ''
+      base.maxLabel = ''
+    } else if (type === 'scale') {
+      base.min = q.min ?? 1
+      base.max = q.max ?? 10
+      base.minLabel = q.minLabel || ''
+      base.maxLabel = q.maxLabel || ''
+      base.options = []
+      base.rows = []
+      base.cols = []
+      base.gridMultiple = false
+    } else if (type === 'vector_scale') {
+      base.rows = q.rows || []
+      base.cols = q.cols || []
+      base.gridMultiple = q.grid_multiple || false  // флаг из бэкенда
+      base.options = []
+      base.min = 1
+      base.max = 10
+      base.minLabel = ''
+      base.maxLabel = ''
+    } else {
+      // text или неизвестный тип
+      base.options = []
+      base.rows = []
+      base.cols = []
+      base.min = 1
+      base.max = 10
+      base.gridMultiple = false
+      base.minLabel = ''
+      base.maxLabel = ''
+    }
+
+    return base
+  })
+
 
   const cfg = (typeof test.result_config === 'string'
     ? JSON.parse(test.result_config)
@@ -533,7 +615,13 @@ function axisCenter(axis) {
 
 // ── Сборка payload и сохранение ──
 function mapType(t) {
-  return { single: 'single_choice', multiple: 'multiple_choice', scale: 'scale', text: 'text' }[t] || t
+  return {
+    single: 'single_choice',
+    multiple: 'multiple_choice',
+    scale: 'scale',
+    text: 'text',
+    vector_scale: 'vector_scale',
+  }[t] || t
 }
 function filterZeroScoring(scoring) {
   if (!scoring || typeof scoring !== 'object') return null
@@ -571,6 +659,11 @@ async function publish() {
       const sc = filterZeroScoring(q.scoring)
       if (sc) out.scoring = sc
     }
+    if (q.type === 'vector_scale') {
+    out.rows = q.rows
+    out.cols = q.cols
+    out.grid_multiple = q.gridMultiple
+  }
     return out
   })
 

@@ -1,4 +1,3 @@
-// auth.js
 import { computed, reactive } from 'vue'
 import { clearTokens, getAccessToken, setTokens } from '../api/index.js'
 

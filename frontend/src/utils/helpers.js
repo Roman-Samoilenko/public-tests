@@ -21,7 +21,13 @@ export function reverseMapType(t) {
     single_choice: 'single',
     multiple_choice: 'multiple',
     scale: 'scale',
-    text: 'text'
+    text: 'text',
+    vector_scale: 'vector_scale',
+    // запасные варианты, если вдруг придут другие
+    radio: 'single',
+    checkbox: 'multiple',
+    linear_scale: 'scale',
+    grid: 'vector_scale',
   }
   return map[t] || 'single'
 }

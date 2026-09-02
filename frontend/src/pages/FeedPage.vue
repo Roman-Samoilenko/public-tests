@@ -1,6 +1,5 @@
 <template>
   <div class="page-wide">
-
     <!-- Заголовок -->
     <div class="feed-header">
       <div>
@@ -13,22 +12,12 @@
       </div>
     </div>
 
-    <!-- Панель импорта из Google Forms -->
+    <!-- Панель импорта (используем компонент ImportForm) -->
     <div v-if="showImport" class="import-panel">
-      <div class="import-inner">
-        <p class="import-label">Импорт из Google Forms</p>
-        <div class="import-row">
-          <input v-model="importUrl" type="url" placeholder="https://docs.google.com/forms/d/..." />
-          <button class="btn" :disabled="importLoading" @click="doImport">
-            <span v-if="importLoading" class="spinner"></span>
-            <span v-else>Загрузить</span>
-          </button>
-        </div>
-        <p v-if="importError" class="error-msg">{{ importError }}</p>
-      </div>
+      <ImportForm @imported="onImported" />
     </div>
 
-    <!-- Если импорт успешен — превью и форма публикации -->
+    <!-- Превью импортированного теста -->
     <div v-if="importedTest" class="import-preview">
       <div class="preview-header">
         <div>
@@ -41,9 +30,9 @@
         </div>
       </div>
       <div class="preview-actions">
-  <button class="btn" @click="editImported">Редактировать</button>
-  <button class="btn-ghost" @click="importedTest = null">Отмена</button>
-</div>
+        <button class="btn" @click="editImported">Редактировать</button>
+        <button class="btn-ghost" @click="importedTest = null">Отмена</button>
+      </div>
     </div>
 
     <!-- Поиск -->
@@ -57,7 +46,7 @@
       />
     </div>
 
-    <!-- Активные теги-фильтры -->
+    <!-- Активные теги -->
     <div v-if="activeTags.length" class="active-tags">
       <span class="active-tags-label font-mono">Теги:</span>
       <span
@@ -123,17 +112,17 @@
         @click="changePage(1)"
       >Вперёд →</button>
     </div>
-
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/index.js'
 import TestCard from '../components/TestCard.vue'
 import { useImportedTestStore } from '../store/importedTest.js'
 import { useTests } from '../composables/useTests.js'
+import ImportForm from '../components/ImportForm.vue'
 
 const router = useRouter()
 const store = useImportedTestStore()
@@ -144,14 +133,31 @@ const activeTags = ref([])
 const filter = ref('all')
 const sort = ref('rating')
 
-// Используем композабл
-const { tests, total, loading, params, loadTests, changePage, resetPage } = useTests({
+// --- Добавляем недостающие переменные ---
+const importedTest = ref(null)               // для превью после импорта
+const showImport = ref(false)
+
+// Фильтры (пример)
+const filterOptions = [
+  { value: 'all', label: 'Все' },
+  { value: 'popular', label: 'Популярные' },
+  { value: 'new', label: 'Новые' },
+  { value: 'my', label: 'Мои тесты' },
+]
+
+// Используем композабл — он должен возвращать limit и offset
+const { tests, total, loading, params, loadTests, changePage, resetPage, limit, offset } = useTests({
   limit: 12,
   sort: 'rating',
   filter: 'all'
 })
 
-// При изменении фильтров перезагружаем сбросом страницы
+// Если useTests не возвращает limit/offset, объявите их вручную:
+// const limit = ref(12)
+// const offset = ref(0)
+// и синхронизируйте с пагинацией.
+
+// При изменении фильтров перезагружаем
 watch([searchQuery, activeTags, filter, sort], () => {
   params.value.search = searchQuery.value
   params.value.tags = activeTags.value
@@ -161,10 +167,14 @@ watch([searchQuery, activeTags, filter, sort], () => {
   loadTests()
 })
 
-// При монтировании загружаем
-onMounted(() => {
-  loadTests()
-})
+onMounted(() => loadTests())
+
+// Обработчик события от ImportForm
+function onImported(testData) {
+  importedTest.value = testData
+  // можно также сохранить в store, если нужно
+  store.setImportedTest(testData)
+}
 
 // Функции для тегов
 function filterByTag(tag) {
@@ -176,11 +186,19 @@ function removeTag(tag) {
   activeTags.value = activeTags.value.filter(t => t !== tag)
 }
 
-// Импорт (теперь через компонент ImportForm)
-const showImport = ref(false)
-
 function editImported() {
-  // если нужно, можно взять из store
+  // например, перейти на страницу создания с импортированными данными
+  router.push('/create?import=true')
+}
+
+// функция setFilter (если нужна)
+function setFilter(value) {
+  filter.value = value
+}
+
+// debouncedSearch (если нужна)
+function debouncedSearch() {
+  // можно реализовать debounce через lodash или простой setTimeout
 }
 </script>
 

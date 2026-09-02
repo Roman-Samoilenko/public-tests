@@ -17,6 +17,10 @@ func calculateScore(
 		if !ok {
 			continue
 		}
+		// Пропускаем матричные вопросы
+		if q.Type == "vector_scale" {
+			continue
+		}
 
 		switch q.Type {
 		case "single_choice":
